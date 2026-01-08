@@ -1,9 +1,8 @@
-
 const VRAM_BEGIN: usize = 0x8000;
 const VRAM_END: usize = 0x9FFF;
 const VRAM_SIZE: usize = VRAM_END - VRAM_BEGIN + 1;
 
-#[derive(Copy,Clone)]
+#[derive(Copy, Clone)]
 enum TilePixelValue {
     Zero,
     One,
@@ -16,7 +15,7 @@ fn empty_tile() -> Tile {
     [[TilePixelValue::Zero; 8]; 8]
 }
 
-pub(crate) struct GPU{
+pub(crate) struct GPU {
     vram: [u8; VRAM_SIZE],
     tile_set: [Tile; 384],
 }
@@ -35,7 +34,9 @@ impl GPU {
         self.vram[index] = value;
         // If our index is greater than 0x1800, we're not writing to the tile set storage
         // so we can just return.
-        if index >= 0x1800 { return }
+        if index >= 0x1800 {
+            return;
+        }
 
         // Tiles rows are encoded in two bytes with the first byte always
         // on an even address. Bitwise ANDing the address with 0xffe
@@ -90,6 +91,5 @@ impl GPU {
 
             self.tile_set[tile_index][row_index][pixel_index] = value;
         }
-
     }
 }
