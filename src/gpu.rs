@@ -21,8 +21,13 @@ pub(crate) struct GPU{
     tile_set: [Tile; 384],
 }
 
-
 impl GPU {
+    pub(crate) fn new() -> GPU {
+        GPU {
+            vram: [0; VRAM_SIZE],
+            tile_set: [empty_tile(); 384],
+        }
+    }
     pub fn read_vram(&self, address: usize) -> u8 {
         self.vram[address]
     }
