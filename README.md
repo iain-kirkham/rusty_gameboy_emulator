@@ -11,16 +11,19 @@ A Game Boy emulator written in Rust, currently in early development.
 
 ## 🚧 Current Status
 
-**Early Development:** Core CPU operations and memory mapping implemented
+**Early Development:** The Majority of CPU operations implemented, basic memory bus, basic timer functions, no PPU/APU yet.
 
 ### ✅ Implemented Features
 
 - **CPU Core**: 8-bit registers, program counter, stack pointer
 - **Instruction Execution**:
-  - Arithmetic: `ADD`, `SUB`, `INC`, `DEC`
-  - Control flow: `JP`, `CALL`, `RET`, `HALT`, `NOP`
-  - Stack: `PUSH`, `POP`
-  - Partial load instructions (`LD`)
+  - Arithmetic & logic (register forms): `ADD`, `ADC`, `SUB`, `SBC`, `AND`, `XOR`, `OR`, `CP`
+  - 16-bit arithmetic and related: `ADD HL, rr` (0x09 / 0x19 / 0x29 / 0x39), `ADD SP, r8` (0xE8), `LD HL, SP+r8` (0xF8), `LD SP, HL` (0xF9)
+  - Control flow & miscellaneous: `NOP`, `HALT`, `DI`, `EI`, `RLCA`, `RRCA`, `RLA`, `RRA`, `DAA`, `CPL`, `SCF`, `CCF`, `JP` (including `JP (HL)`), `JR`, `CALL`, `RET`, `RETI`, `RST`
+  - Load operations: register-to-register `LD r, r'` (0x40-0x7F excluding 0x76), immediate byte/word loads `LD r,d8` and `LD rr,d16`, `LD A,(HL+)`, `LD A,(HL-)`, `LD (DE),A`, `LD (a16),A`, `LD A,(a16)`, `LDH (a8),A`, `LDH A,(a8)`
+  - Increment / Decrement: `INC` / `DEC` for 8-bit and 16-bit targets
+  - Stack operations: `PUSH` / `POP` for BC/DE/HL/AF
+  - CB-prefixed instructions: full CB set implemented - `RLC`, `RRC`, `RL`, `RR`, `SLA`, `SRA`, `SWAP`, `SRL`, `BIT`, `RES`, `SET` (all targets, including HLI)
 - **Memory Bus**:
   - Basic address decoding and read/write support
   - Internal RAM and basic VRAM access
@@ -30,11 +33,12 @@ A Game Boy emulator written in Rust, currently in early development.
 - Expanding the instruction set to support Blargg test ROMs
 - Memory bus improvements for full address space coverage
 - ROM loading functionality
+- Timer implementation
 
 ### 📋 TODO
 
 - [ ] Complete instruction set
-- [ ]  Implement the Interrupt Enable/Flag system
+- [ ] Implement the Interrupt Enable/Flag system
 - [ ] Timer implementation
 - [ ] Add PPU (Picture Processing Unit) for graphics
 - [ ] Add Audio Processing Unit (APU)
