@@ -4,7 +4,7 @@ use crate::instructions::{ArithmeticTarget, Instruction};
 /// These instructions operate on the A register and various source operands
 pub fn decode(byte: u8) -> Option<Instruction> {
     // ADD A, r instructions (0x80-0x87, excluding 0x86 which uses (HL))
-    if (0x80..=0x87).contains(&byte) {
+    if (0x80..=0x87).contains(&byte) && byte != 0x86 {
         return ArithmeticTarget::from_lower_bits(byte).map(Instruction::ADD);
     }
 

@@ -56,7 +56,6 @@ pub fn decode(byte: u8) -> Option<Instruction> {
         0xEF => Some(Instruction::RST(0x28)), // RST 28H
         0xF7 => Some(Instruction::RST(0x30)), // RST 30H
         0xFF => Some(Instruction::RST(0x38)), // RST 38H
-
         _ => None,
     }
 }
