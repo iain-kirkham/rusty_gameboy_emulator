@@ -1,7 +1,7 @@
-// Main instruction decoder module
-//
-// This module coordinates the decoding of Game Boy opcodes into Instruction enums.
-// It delegates to specialized decoder modules for different instruction categories.
+//! Main instruction decoder module.
+//!
+//! This module coordinates the decoding of Game Boy opcodes into Instruction enums.
+//! It delegates to specialized decoder modules for different instruction categories.
 
 mod arithmetic;
 mod arithmetic16;

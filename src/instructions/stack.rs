@@ -1,4 +1,7 @@
-// Stack operations: PUSH and POP instructions
+//! Stack operations module.
+//!
+//! This module defines the target types for stack operations (PUSH and POP),
+//! and provides decoding utilities for register pair operands.
 
 #[derive(Debug, Copy, Clone)]
 pub enum StackTarget {

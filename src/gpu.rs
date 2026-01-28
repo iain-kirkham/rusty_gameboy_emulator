@@ -1,3 +1,8 @@
+//! GPU module implementing the Game Boy graphics processor.
+//!
+//! This module handles VRAM management, tile rendering, and video output
+//! for the Game Boy display.
+
 const VRAM_BEGIN: usize = 0x8000;
 const VRAM_END: usize = 0x9FFF;
 const VRAM_SIZE: usize = VRAM_END - VRAM_BEGIN + 1;

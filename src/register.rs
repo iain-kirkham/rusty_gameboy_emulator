@@ -1,3 +1,8 @@
+//! Register module implementing CPU registers and flags.
+//!
+//! This module defines the 8-bit and 16-bit registers of the Game Boy CPU,
+//! including the flags register (F) with its condition flags.
+
 /// The F register contains 4 flags in the upper nibble (bits 7-4).
 /// Bits 3-0 are always zero on real hardware.
 ///

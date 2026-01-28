@@ -1,3 +1,8 @@
+//! Arithmetic instruction decoder module.
+//!
+//! This module decodes arithmetic and logical instructions that operate
+//! on the A register and various source operands.
+
 use crate::instructions::{ArithmeticTarget, Instruction};
 
 /// Decode arithmetic and logical instructions

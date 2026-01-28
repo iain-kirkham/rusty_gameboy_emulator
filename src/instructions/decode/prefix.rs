@@ -1,3 +1,8 @@
+//! CB-prefixed instruction decoder module.
+//!
+//! This module decodes CB-prefixed instructions for bit operations,
+//! rotations, and shifts on registers and memory.
+
 use crate::instructions::{Instruction, PrefixTarget};
 
 /// Decode CB-prefixed instructions

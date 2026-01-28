@@ -1,15 +1,15 @@
-// Game Boy Instruction Set Module
-//
-// This module defines all instruction types and provides decoding functionality
-// for the Game Boy CPU instruction set.
-//
-// The instruction set is organized into logical categories:
-// - Arithmetic/Logic operations (ADD, SUB, AND, XOR, etc.)
-// - Load/Store operations (LD)
-// - Control flow (JP, JR, CALL, RET)
-// - Stack operations (PUSH, POP)
-// - Increment/Decrement (INC, DEC)
-// - Prefix/Extended instructions (CB-prefixed opcodes)
+//! Game Boy Instruction Set module.
+//!
+//! This module defines all instruction types and provides decoding functionality
+//! for the Game Boy CPU instruction set.
+//!
+//! The instruction set is organized into logical categories:
+//! - Arithmetic/Logic operations (ADD, SUB, AND, XOR, etc.)
+//! - Load/Store operations (LD)
+//! - Control flow (JP, JR, CALL, RET)
+//! - Stack operations (PUSH, POP)
+//! - Increment/Decrement (INC, DEC)
+//! - Prefix/Extended instructions (CB-prefixed opcodes)
 
 pub mod arithmetic;
 pub mod control_flow;

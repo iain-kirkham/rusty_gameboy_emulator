@@ -1,4 +1,7 @@
-// Stack operation decoders: PUSH and POP instructions
+//! Stack operation decoder module.
+//!
+//! This module decodes stack instructions (PUSH and POP) that move data
+//! between registers and the stack.
 
 use crate::instructions::{Instruction, StackTarget};
 

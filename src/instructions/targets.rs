@@ -1,4 +1,7 @@
-// Shared target/source enums used across instruction types
+//! Shared target/source enums module.
+//!
+//! This module defines common target and source types used across different
+//! instruction categories for register and operand encoding.
 use crate::register::{Register16, Register8};
 
 #[derive(Debug, Copy, Clone)]

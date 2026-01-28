@@ -1,6 +1,6 @@
 //! Game Boy timer module
 //! Implements DIV, TIMA, TMA, and TAC with edge-detection and overflow delay.
-//! Reference: https://gbdev.io/pandocs/Timer_and_Divider_Registers.html
+//! Reference: <https://gbdev.io/pandocs/Timer_and_Divider_Registers.html>
 
 pub const DIV_REGISTER: u16 = 0xFF04;
 pub const TIMA_REGISTER: u16 = 0xFF05;
@@ -20,12 +20,12 @@ const TIMA_OVERFLOW_RELOAD_DELAY: u8 = 4;
 const DIV_RESET_VALUE: u16 = 0x0000;
 
 pub struct Timer {
-    div: u16,                    // internal 16-bit divider
-    tima: u8,                    // timer counter (0xFF05)
-    tma: u8,                     // timer modulo (0xFF06)
-    tac: u8,                     // timer control (0xFF07)
-    prev_timer_bit: bool,        // previous selected DIV bit state
-    overflow_delay: Option<u8>,  // pending reload delay after overflow
+    div: u16,                   // internal 16-bit divider
+    tima: u8,                   // timer counter (0xFF05)
+    tma: u8,                    // timer modulo (0xFF06)
+    tac: u8,                    // timer control (0xFF07)
+    prev_timer_bit: bool,       // previous selected DIV bit state
+    overflow_delay: Option<u8>, // pending reload delay after overflow
 }
 
 impl Timer {
@@ -109,8 +109,8 @@ impl Timer {
         false
     }
 
-    // detect a falling edge (prev == true && new == false), increment TIMA if needed,
-    // then update `prev_timer_bit`.
+    // detect a falling edge, increment TIMA if needed,
+    // then update prev_timer_bit.
     fn handle_falling_edge_and_update_prev(&mut self, new_bit: bool) {
         if self.prev_timer_bit && !new_bit {
             self.increment_tima();
@@ -129,7 +129,6 @@ impl Timer {
     }
 
     // Register helpers
-
     fn read_div(&self) -> u8 {
         (self.div >> 8) as u8
     }
@@ -138,7 +137,7 @@ impl Timer {
         self.tac | TAC_READONLY_MASK
     }
 
-    // Reset divider; recalc selected bit and handle glitch edge using centralized helper.
+    // Reset divider; recalc selected bit and handle glitch edge.
     fn write_div(&mut self) {
         self.div = DIV_RESET_VALUE;
         let current_bit = self.calculate_timer_bit();

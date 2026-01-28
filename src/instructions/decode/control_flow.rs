@@ -1,3 +1,12 @@
+//! Control flow instruction decoder module.
+//!
+//! This module decodes control flow instructions including:
+//! - Basic control: NOP, HALT, DI, EI
+//! - Jumps: JP nn, JP cc,nn, JP (HL)
+//! - Relative jumps: JR r8, JR cc,r8
+//! - Calls: CALL nn, CALL cc,nn
+//! - Returns: RET, RET cc, RETI
+
 use crate::instructions::{Instruction, JumpTest};
 
 /// Decode control flow instructions (jumps, calls, returns, and basic control)

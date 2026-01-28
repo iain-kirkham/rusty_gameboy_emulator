@@ -1,3 +1,8 @@
+//! Increment and decrement instruction decoder module.
+//!
+//! This module decodes increment and decrement instructions that operate
+//! on both 8-bit and 16-bit registers.
+
 use crate::instructions::{IncDecTarget, Instruction};
 use crate::register::{Register16::*, Register8::*};
 

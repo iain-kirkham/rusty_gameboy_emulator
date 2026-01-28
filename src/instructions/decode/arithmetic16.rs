@@ -1,3 +1,11 @@
+//! 16-bit arithmetic instruction decoder module.
+//!
+//! This module decodes 16-bit arithmetic instructions including:
+//! - ADD HL, rr (0x09, 0x19, 0x29, 0x39)
+//! - ADD SP, r8 (0xE8)
+//! - LD HL, SP+r8 (0xF8)
+//! - LD SP, HL (0xF9)
+
 use crate::instructions::Instruction;
 use crate::register::Register16;
 

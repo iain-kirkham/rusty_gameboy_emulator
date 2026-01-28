@@ -1,3 +1,8 @@
+//! CPU module implementing the Game Boy processor.
+//!
+//! This module contains the CPU struct and instruction execution logic,
+//! managing registers, memory access, and the fetch-decode-execute cycle.
+
 use crate::instructions::{
     ArithmeticTarget, IncDecTarget, Instruction, JumpTest, LoadByteSource, LoadByteTarget,
     LoadType, LoadWordSource, LoadWordTarget, StackTarget,

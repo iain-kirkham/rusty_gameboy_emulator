@@ -1,4 +1,7 @@
-// Load and store instructions
+//! Load and store instructions module.
+//!
+//! This module defines the target and source types for load/store instructions,
+//! and provides decoding utilities for register and memory operands.
 
 #[derive(Debug, Copy, Clone)]
 #[allow(non_camel_case_types, dead_code)]

@@ -1,3 +1,8 @@
+//! Game Boy emulator - main entry point.
+//!
+//! This module orchestrates the emulation loop, loading ROMs and running CPU cycles
+//! with per-cycle hardware ticking (timer, GPU, etc.).
+
 mod cpu;
 mod gpu;
 mod instructions;

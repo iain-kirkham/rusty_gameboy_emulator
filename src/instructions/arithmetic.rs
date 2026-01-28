@@ -1,4 +1,8 @@
-// Arithmetic and logical operations
+//! Arithmetic and logical operations module.
+//!
+//! This module defines the target types for arithmetic and logical instructions,
+//! and provides decoding utilities for operand registers.
+
 #[derive(Debug, Copy, Clone)]
 pub enum ArithmeticTarget {
     A,

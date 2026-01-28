@@ -1,3 +1,8 @@
+//! Load instruction decoder module.
+//!
+//! This module decodes load and store instructions that move data between
+//! registers, memory, and immediate values.
+
 use crate::instructions::{
     Instruction, LoadByteSource, LoadByteTarget, LoadType, LoadWordSource, LoadWordTarget,
 };

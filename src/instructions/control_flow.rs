@@ -1,4 +1,7 @@
-// Control flow instructions: jumps, calls, and returns
+//! Control flow instructions module.
+//!
+//! This module defines the target types for jumps, calls, and returns,
+//! and provides decoding utilities for conditional jump tests.
 
 #[derive(Debug, Copy, Clone)]
 pub enum JumpTest {
