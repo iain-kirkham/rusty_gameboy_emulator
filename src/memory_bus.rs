@@ -78,6 +78,10 @@ impl MemoryBus {
         let copy_len = std::cmp::min(rom_data.len(), MEM_SIZE);
         memory[..copy_len].copy_from_slice(&rom_data[..copy_len]);
 
+        // Initialize serial registers to sensible defaults so reads behave predictably.
+        memory[SERIAL_TRANSFER_DATA] = 0x00;
+        memory[SERIAL_TRANSFER_CONTROL] = SERIAL_CONTROL_IDLE;
+
         MemoryBus {
             memory,
             gpu: gpu::GPU::new(),
@@ -100,15 +104,7 @@ impl MemoryBus {
                 self.memory[mirror_address]
             }
             OAM_START..=OAM_END => self.memory[address],
-            SERIAL_TRANSFER_DATA => {
-                // SB (Serial transfer data) - return the last byte that was written
-                // Used by Blargg test ROMs to output characters
-                self.serial_output.last().copied().unwrap_or(0)
-            }
-            SERIAL_TRANSFER_CONTROL => {
-                // SC (Serial transfer control) - bit 7 indicates transfer in progress
-                SERIAL_CONTROL_IDLE
-            }
+            SERIAL_TRANSFER_DATA | SERIAL_TRANSFER_CONTROL => self.memory[address],
             // Timer registers (0xFF04-0xFF07) are handled by the timer module
             0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => {
                 self.timer.read(address as u16)
@@ -126,13 +122,28 @@ impl MemoryBus {
             ROM_START..=ROM_END => {} // ROM - ignore writes
             VRAM_START..=VRAM_END => self.gpu.write_vram(address - VRAM_OFFSET, value),
             EXTERNAL_RAM_START..=EXTERNAL_RAM_END => self.memory[address] = value,
-            WORK_RAM_START..=ECHO_RAM_END => self.memory[address] = value,
+            WORK_RAM_START..=WORK_RAM_BANK1_END => self.memory[address] = value,
+            ECHO_RAM_START..=ECHO_RAM_END => {
+                self.memory[address - ECHO_RAM_MIRROR_OFFSET] = value;
+            },
             OAM_START..=OAM_END => self.memory[address] = value,
             SERIAL_TRANSFER_DATA => {
-                self.serial_output.push(value);
+                // Store the value in the SB hardware register so reads return it
+                self.memory[address] = value;
             }
             SERIAL_TRANSFER_CONTROL => {
-                // Ignore for now
+                // If bit 7 is set, start a transfer. Use `read_byte` so any special
+                // behavior for reading SB (0xFF01) is preserved.
+                if value & 0x80 != 0 {
+                    let character = self.read_byte(0xFF01);
+                    self.serial_output.push(character);
+
+                    // Reset bit 7 to signal transfer complete while preserving other bits
+                    self.memory[SERIAL_TRANSFER_CONTROL] = value & 0x7F;
+                } else {
+                    // For other writes, store the value in the SC register
+                    self.memory[address] = value;
+                }
             }
             // Timer registers (0xFF04-0xFF07) are handled by the timer module
             0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => {

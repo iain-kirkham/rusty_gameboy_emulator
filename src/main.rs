@@ -9,6 +9,7 @@ mod instructions;
 mod memory_bus;
 mod register;
 mod timer;
+mod flag_helpers;
 
 use crate::cpu::CPU;
 use std::fs;
@@ -41,6 +42,8 @@ fn main() {
                 println!("\n CPU halted after {} cycles", cycle_count);
                 break;
             }
+
+
 
             let t_cycles = cpu.step() as usize;
 

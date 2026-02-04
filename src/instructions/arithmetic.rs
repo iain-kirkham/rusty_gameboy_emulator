@@ -12,6 +12,8 @@ pub enum ArithmeticTarget {
     E,
     H,
     L,
+    HLI,
+    D8
 }
 
 impl ArithmeticTarget {
@@ -25,7 +27,7 @@ impl ArithmeticTarget {
             0x03 => Some(ArithmeticTarget::E),
             0x04 => Some(ArithmeticTarget::H),
             0x05 => Some(ArithmeticTarget::L),
-            0x06 => None, // (HL) - memory indirect addressing
+            0x06 => Some(ArithmeticTarget::HLI), // (HL) - memory indirect addressing
             0x07 => Some(ArithmeticTarget::A),
             _ => None,
         }

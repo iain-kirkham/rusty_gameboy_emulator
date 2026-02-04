@@ -32,6 +32,10 @@ pub fn decode(byte: u8) -> Option<Instruction> {
     if (0xA0..=0xA7).contains(&byte) {
         return ArithmeticTarget::from_lower_bits(byte).map(Instruction::AND);
     }
+    
+    if byte == 0xE6 {
+        return Some(Instruction::AND(ArithmeticTarget::D8));
+    }
 
     // XOR A, r instructions (0xA8-0xAF)
     if (0xA8..=0xAF).contains(&byte) {
@@ -46,6 +50,12 @@ pub fn decode(byte: u8) -> Option<Instruction> {
     // CP A, r instructions (Compare) (0xB8-0xBF)
     if (0xB8..=0xBF).contains(&byte) {
         return ArithmeticTarget::from_lower_bits(byte).map(Instruction::CP);
+    }
+
+    match byte {
+        0xFE => return Some(Instruction::CP(ArithmeticTarget::D8)),
+        0xC6 => return Some(Instruction::ADD(ArithmeticTarget::D8)),
+        _ => {}
     }
 
     None

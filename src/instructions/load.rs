@@ -16,6 +16,8 @@ pub enum LoadByteTarget {
     HLI,  // Memory address pointed to by HL register pair
     DEI,  // Memory address pointed to by DE register pair
     BCI,  // Memory address pointed to by BC register pair
+    HLI_INC, // Memory address at HL, then increment HL (HL+)
+    HLI_DEC, // Memory address at HL, then decrement HL (HL-)
     A16I, // Memory address given by immediate 16-bit value (next two bytes)
     A8I,  // High RAM: Memory address 0xFF00 + immediate 8-bit offset
 }
@@ -35,6 +37,7 @@ pub enum LoadByteSource {
     HLI_INC, // Memory address at HL, then increment HL (HL+)
     HLI_DEC, // Memory address at HL, then decrement HL (HL-)
     BCI,     // Memory address pointed to by BC register pair
+    DEI,
     A16I,    // Memory address given by immediate 16-bit value (next two bytes)
     A8I,     // High RAM: Memory address 0xFF00 + immediate 8-bit offset
 }
@@ -46,6 +49,7 @@ pub enum LoadWordTarget {
     BC,
     DE,
     SP,
+    A16I
 }
 
 #[derive(Debug, Copy, Clone)]

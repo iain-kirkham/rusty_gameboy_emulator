@@ -3,6 +3,7 @@
 //! This module contains the CPU struct and instruction execution logic,
 //! managing registers, memory access, and the fetch-decode-execute cycle.
 
+use crate::flag_helpers as fh;
 use crate::instructions::{
     ArithmeticTarget, IncDecTarget, Instruction, JumpTest, LoadByteSource, LoadByteTarget,
     LoadType, LoadWordSource, LoadWordTarget, StackTarget,
@@ -79,9 +80,17 @@ impl CPU {
             // Logical operations on A register
             Instruction::AND(target) => {
                 let value = self.get_arithmetic_target(target);
-                let new_value = self.and(value);
-                self.registers.a = new_value;
-                (self.registers.pc.wrapping_add(1), 4)
+                self.registers.a &= value;
+                self.registers.f.zero = self.registers.a == 0;
+                self.registers.f.subtract = false;
+                self.registers.f.half_carry = true;
+                self.registers.f.carry = false;
+                let (pc_inc, cycles) = match target {
+                    ArithmeticTarget::D8 => (2, 8),
+                    ArithmeticTarget::HLI => (1, 8),
+                    _ => (1, 4),
+                };
+                (self.registers.pc.wrapping_add(pc_inc), cycles)
             }
             Instruction::OR(target) => {
                 let value = self.get_arithmetic_target(target);
@@ -98,7 +107,11 @@ impl CPU {
             Instruction::CP(target) => {
                 let value = self.get_arithmetic_target(target);
                 self.cp(value);
-                (self.registers.pc.wrapping_add(1), 4)
+                let pc_increment = match target {
+                    ArithmeticTarget::D8 => 2,
+                    _ => 1,
+                };
+                (self.registers.pc.wrapping_add(pc_increment), 4)
             }
             // Increment/Decrement instructions (8-bit and 16-bit)
             Instruction::INC(target) => match target {
@@ -151,6 +164,7 @@ impl CPU {
                         LoadByteSource::HLI_INC => 8,
                         LoadByteSource::HLI_DEC => 8,
                         LoadByteSource::BCI => 8,
+                        LoadByteSource::DEI => 8, // LD (DE),r
                         LoadByteSource::A => 4,
                         LoadByteSource::B => 4,
                         LoadByteSource::C => 4,
@@ -163,11 +177,10 @@ impl CPU {
                     (
                         self.registers
                             .pc
-                            .wrapping_add(self.get_load_byte_pc_increment(source)),
+                            .wrapping_add(self.get_load_byte_pc_increment(target, source)),
                         cycles,
                     )
                 }
-
                 // 16-bit load
                 LoadType::Word(target, source) => {
                     let source_value = match source {
@@ -175,22 +188,25 @@ impl CPU {
                         LoadWordSource::SP => self.registers.sp,
                         LoadWordSource::HL => self.registers.get_hl(),
                     };
+
                     match target {
                         LoadWordTarget::HL => self.registers.set_hl(source_value),
                         LoadWordTarget::BC => self.registers.set_bc(source_value),
                         LoadWordTarget::DE => self.registers.set_de(source_value),
                         LoadWordTarget::SP => self.registers.sp = source_value,
+                        LoadWordTarget::A16I => {
+                            let address = self.read_next_word();
+                            self.bus.write_byte(address, (source_value & 0xFF) as u8);
+                            self.bus
+                                .write_byte(address.wrapping_add(1), (source_value >> 8) as u8);
+                        }
                     };
-                    let pc_inc = match source {
-                        LoadWordSource::D16 => 3, // opcode + 2-byte immediate
-                        LoadWordSource::HL | LoadWordSource::SP => 1,
+                    let (length, cycles) = match (target, source) {
+                        (LoadWordTarget::A16I, _) => (3, 20), // Opcode 0x08
+                        (_, LoadWordSource::D16) => (3, 12),  // LD rr, d16
+                        _ => (1, 8),                          // LD SP, HL, etc.
                     };
-                    let cycles = match source {
-                        LoadWordSource::D16 => 12, // LD rr,d16
-                        LoadWordSource::SP => 8,
-                        LoadWordSource::HL => 8,
-                    };
-                    (self.registers.pc.wrapping_add(pc_inc), cycles)
+                    (self.registers.pc.wrapping_add(length), cycles)
                 }
             },
             // Stack operations: Push/Pop/Call/Return
@@ -272,28 +288,47 @@ impl CPU {
             }
             // Miscellaneous special arithmetic operations
             Instruction::DAA => {
-                // Decimal Adjust Accumulator
+                // Decimal Adjust Accumulator (DAA)
+                //
+                // Correct behavior:
+                // - If previous operation was an addition (N flag clear):
+                //     - If H set OR low nibble > 9 => add 0x06
+                //     - If C set OR A > 0x99 => add 0x60 and set carry
+                // - If previous operation was a subtraction (N flag set):
+                //     - If H set => subtract 0x06
+                //     - If C set => subtract 0x60
+                // - Z = (A == 0)
+                // - H = 0
+                // - C updated according to rules above (use local carry to avoid early mutation)
                 let mut a = self.registers.a;
-                let mut adjust = 0;
+                let mut adjust: u8 = 0;
+                let mut carry = self.registers.f.carry;
 
-                if self.registers.f.half_carry || (!self.registers.f.subtract && (a & 0x0F) > 9) {
-                    adjust |= 0x06;
-                }
-
-                if self.registers.f.carry || (!self.registers.f.subtract && a > 0x99) {
-                    adjust |= 0x60;
-                    self.registers.f.carry = true;
-                }
-
-                if self.registers.f.subtract {
-                    a = a.wrapping_sub(adjust);
-                } else {
+                if !self.registers.f.subtract {
+                    // Addition case
+                    if self.registers.f.half_carry || (a & 0x0F) > 9 {
+                        adjust |= 0x06;
+                    }
+                    if carry || a > 0x99 {
+                        adjust |= 0x60;
+                        carry = true;
+                    }
                     a = a.wrapping_add(adjust);
+                } else {
+                    // Subtraction case
+                    if self.registers.f.half_carry {
+                        adjust |= 0x06;
+                    }
+                    if carry {
+                        adjust |= 0x60;
+                    }
+                    a = a.wrapping_sub(adjust);
                 }
 
                 self.registers.a = a;
                 self.registers.f.zero = a == 0;
                 self.registers.f.half_carry = false;
+                self.registers.f.carry = carry;
                 (self.registers.pc.wrapping_add(1), 4)
             }
             Instruction::CPL => {
@@ -339,28 +374,29 @@ impl CPU {
             }
             Instruction::ADDSP => {
                 // ADDSP: Add signed 8-bit immediate to SP (flags set from lower 8 bits)
-                let offset = self.read_next_byte() as i8 as i16 as u16;
+                // Read signed immediate (used for result) and use helper functions for flags.
+                let offset_signed = self.read_next_byte() as i8;
                 let sp = self.registers.sp;
-                let result = sp.wrapping_add(offset);
+                let result = fh::add_sp_signed(sp, offset_signed);
 
                 self.registers.f.zero = false;
                 self.registers.f.subtract = false;
-                self.registers.f.half_carry = (sp & 0x0F) + (offset & 0x0F) > 0x0F;
-                self.registers.f.carry = (sp & 0xFF) + (offset & 0xFF) > 0xFF;
+                self.registers.f.half_carry = fh::half_carry_add_sp(sp, offset_signed);
+                self.registers.f.carry = fh::carry_add_sp(sp, offset_signed);
 
                 self.registers.sp = result;
                 (self.registers.pc.wrapping_add(2), 16)
             }
             Instruction::LDHLSP => {
                 // LDHLSP: Load HL with SP + signed 8-bit immediate (flags set from lower 8 bits)
-                let offset = self.read_next_byte() as i8 as i16 as u16;
+                let offset_signed = self.read_next_byte() as i8;
                 let sp = self.registers.sp;
-                let result = sp.wrapping_add(offset);
+                let result = fh::add_sp_signed(sp, offset_signed);
 
                 self.registers.f.zero = false;
                 self.registers.f.subtract = false;
-                self.registers.f.half_carry = (sp & 0x0F) + (offset & 0x0F) > 0x0F;
-                self.registers.f.carry = (sp & 0xFF) + (offset & 0xFF) > 0xFF;
+                self.registers.f.half_carry = fh::half_carry_add_sp(sp, offset_signed);
+                self.registers.f.carry = fh::carry_add_sp(sp, offset_signed);
 
                 self.registers.set_hl(result);
                 (self.registers.pc.wrapping_add(2), 12)
@@ -517,6 +553,8 @@ impl CPU {
             LoadByteSource::L => self.registers.l,
             LoadByteSource::D8 => self.read_next_byte(),
             LoadByteSource::HLI => self.bus.read_byte(self.registers.get_hl()),
+            LoadByteSource::BCI => self.bus.read_byte(self.registers.get_bc()),
+            LoadByteSource::DEI => self.bus.read_byte(self.registers.get_de()),
             LoadByteSource::HLI_INC => {
                 let value = self.bus.read_byte(self.registers.get_hl());
                 self.registers
@@ -529,7 +567,6 @@ impl CPU {
                     .set_hl(self.registers.get_hl().wrapping_sub(1));
                 value
             }
-            LoadByteSource::BCI => self.bus.read_byte(self.registers.get_bc()),
             LoadByteSource::A16I => {
                 let address = self.read_next_word();
                 self.bus.read_byte(address)
@@ -565,16 +602,28 @@ impl CPU {
                 let address = 0xFF00 + offset as u16;
                 self.bus.write_byte(address, value);
             }
+            LoadByteTarget::HLI_INC => {
+                let address = self.registers.get_hl();
+                self.bus.write_byte(address, value);
+                self.registers.set_hl(address.wrapping_add(1));
+            }
+            LoadByteTarget::HLI_DEC => {
+                let address = self.registers.get_hl();
+                self.bus.write_byte(address, value);
+                self.registers.set_hl(address.wrapping_sub(1));
+            }
         }
     }
 
     /// Calculate how much the PC should advance based on the load source.
-    /// Different sources consume different numbers of bytes (opcode + operands).
-    fn get_load_byte_pc_increment(&self, source: LoadByteSource) -> u16 {
-        match source {
-            LoadByteSource::D8 => 2,   // opcode + 1 byte immediate
-            LoadByteSource::A16I => 3, // opcode + 2 byte immediate
-            LoadByteSource::A8I => 2,  // opcode + 1 byte offset (high RAM)
+    fn get_load_byte_pc_increment(&self, target: LoadByteTarget, source: LoadByteSource) -> u16 {
+        match (target, source) {
+            (LoadByteTarget::A16I, _) => 3,
+            (LoadByteTarget::A8I, _) => 2,
+
+            (_, LoadByteSource::A16I) => 3,
+            (_, LoadByteSource::A8I) => 2,
+            (_, LoadByteSource::D8) => 2,
             _ => 1,
         }
     }
@@ -590,26 +639,28 @@ impl CPU {
             ArithmeticTarget::E => self.registers.e,
             ArithmeticTarget::H => self.registers.h,
             ArithmeticTarget::L => self.registers.l,
+            ArithmeticTarget::HLI => self.bus.read_byte(self.registers.get_hl()),
+            ArithmeticTarget::D8 => self.bus.read_byte(self.registers.pc.wrapping_add(1)),
         }
     }
 
     /// Perform 8-bit addition: A += value (sets all CPU flags).
     fn add(&mut self, value: u8) -> u8 {
         let (new_value, did_overflow) = self.registers.a.overflowing_add(value);
-        let half_carry = (self.registers.a & 0x0F) + (value & 0x0F) > 0x0F;
+        let half_carry = fh::half_carry_add(self.registers.a, value);
         self.set_arithmetic_flags(new_value, false, did_overflow, half_carry);
         new_value
     }
 
     /// Perform 8-bit addition with carry: A += value + carry_flag (sets all CPU flags).
     fn adc(&mut self, value: u8) -> u8 {
-        let carry = if self.registers.f.carry { 1 } else { 0 };
+        let carry_in = self.registers.f.carry;
 
         let (temp, overflow1) = self.registers.a.overflowing_add(value);
-        let (new_value, overflow2) = temp.overflowing_add(carry);
+        let (new_value, overflow2) = temp.overflowing_add(if carry_in { 1 } else { 0 });
 
         // Check for half carry: carry from bit 3 to bit 4
-        let half_carry = ((self.registers.a & 0x0F) + (value & 0x0F) + carry) > 0x0F;
+        let half_carry = fh::half_carry_add_with_carry(self.registers.a, value, carry_in);
         let did_overflow = overflow1 || overflow2;
 
         self.set_arithmetic_flags(new_value, false, did_overflow, half_carry);
@@ -619,20 +670,20 @@ impl CPU {
     /// Perform 8-bit subtraction: A -= value (sets all CPU flags).
     fn sub(&mut self, value: u8) -> u8 {
         let (new_value, did_overflow) = self.registers.a.overflowing_sub(value);
-        let half_carry = (self.registers.a & 0x0F) < (value & 0x0F);
+        let half_carry = fh::half_borrow_sub(self.registers.a, value);
         self.set_arithmetic_flags(new_value, true, did_overflow, half_carry);
         new_value
     }
 
     /// Perform 8-bit subtraction with carry: A -= value - carry_flag (sets all CPU flags).
     fn sbc(&mut self, value: u8) -> u8 {
-        let carry = if self.registers.f.carry { 1 } else { 0 };
+        let carry_in = self.registers.f.carry;
 
         let (temp, overflow1) = self.registers.a.overflowing_sub(value);
-        let (new_value, overflow2) = temp.overflowing_sub(carry);
+        let (new_value, overflow2) = temp.overflowing_sub(if carry_in { 1 } else { 0 });
 
-        // Check for half carry: borrow from bit 4 to bit 3
-        let half_carry = (self.registers.a & 0x0F) < ((value & 0x0F) + carry);
+        // Check for half carry (borrow from bit 4 to bit 3) using helper to avoid wrapping issues.
+        let half_carry = fh::half_borrow_sub_with_carry(self.registers.a, value, carry_in);
         let did_overflow = overflow1 || overflow2;
 
         self.set_arithmetic_flags(new_value, true, did_overflow, half_carry);
@@ -684,7 +735,7 @@ impl CPU {
         self.registers.f.zero = result == 0;
         self.registers.f.subtract = true;
         self.registers.f.carry = did_overflow;
-        self.registers.f.half_carry = (self.registers.a & 0x0F) < (value & 0x0F);
+        self.registers.f.half_carry = fh::half_borrow_sub(self.registers.a, value);
     }
 
     /// Increment an 8-bit value (sets Z, N=false, H flags; doesn't affect C).
@@ -692,7 +743,7 @@ impl CPU {
         let new_value = value.wrapping_add(1);
         self.registers.f.zero = new_value == 0;
         self.registers.f.subtract = false;
-        self.registers.f.half_carry = (value & 0x0F) == 0x0F;
+        self.registers.f.half_carry = fh::half_carry_inc(value);
         new_value
     }
 
@@ -701,7 +752,7 @@ impl CPU {
         let new_value = value.wrapping_sub(1);
         self.registers.f.zero = new_value == 0;
         self.registers.f.subtract = true;
-        self.registers.f.half_carry = (value & 0x0F) == 0;
+        self.registers.f.half_carry = fh::half_borrow_dec(value);
         new_value
     }
 
@@ -743,31 +794,72 @@ impl CPU {
         if self.is_halted {
             return 0;
         }
-        let mut instruction_byte = self.bus.read_byte(self.registers.pc);
-        let prefixed = instruction_byte == 0xCB;
-        if prefixed {
-            instruction_byte = self.bus.read_byte(self.registers.pc + 1);
-        }
 
-        let (next_pc, cycles) =
-            if let Some(instruction) = Instruction::from_byte(instruction_byte, prefixed) {
-                self.execute(instruction)
+        // Read first opcode byte and determine if it's a CB-prefix
+        let first_byte = self.bus.read_byte(self.registers.pc);
+        let prefixed = first_byte == 0xCB;
+
+        // For prefixed instructions, opcode byte is the second byte; otherwise use first.
+        let opcode_byte = if prefixed {
+            self.bus.read_byte(self.registers.pc + 1)
+        } else {
+            first_byte
+        };
+
+        // Decode instruction
+        let decoded = Instruction::from_byte(opcode_byte, prefixed);
+
+        if let Some(instruction) = decoded {
+            // Build a readable opcode string (e.g. "0x3E" or "0xCB37")
+            let opcode_str = if prefixed {
+                format!("0xCB{:02X}", opcode_byte)
             } else {
-                let instruction_str = if prefixed {
-                    format!("0xCB{:02X}", instruction_byte)
-                } else {
-                    format!("0x{:02X}", instruction_byte)
-                };
-                panic!(
-                    "Unknown instruction {} at PC=0x{:04X}",
-                    instruction_str, self.registers.pc
-                );
+                format!("0x{:02X}", opcode_byte)
             };
 
-        self.registers.pc = next_pc;
+            // Print a compact CPU state for debugging: PC, opcode, decoded instruction,
+            // registers A,B,C,D,E,H,L, SP, HL and flags (raw F and booleans).
+            if self.registers.pc < 0x0206 || self.registers.pc > 0x020D {
+                println!(
+                    "PC={:#06X} OPCODE={} INST={:?} \
+    A={:#04X} F={:02X} Z={} N={} H={} C={} \
+    B={:#04X} C={:#04X} D={:#04X} E={:#04X} H={:#04X} L={:#04X} \
+    SP={:#06X} HL={:#06X}",
+                    self.registers.pc,
+                    opcode_str,
+                    &instruction,
+                    self.registers.a,
+                    self.registers.f.to_byte(),
+                    self.registers.f.zero,
+                    self.registers.f.subtract,
+                    self.registers.f.half_carry,
+                    self.registers.f.carry,
+                    self.registers.b,
+                    self.registers.c,
+                    self.registers.d,
+                    self.registers.e,
+                    self.registers.h,
+                    self.registers.l,
+                    self.registers.sp,
+                    self.registers.get_hl()
+                );
+            }
 
-        // Return the number of T-states consumed so the caller can advance timers/PPU/DMA.
-        cycles
+            // Execute the decoded instruction and advance PC
+            let (next_pc, cycles) = self.execute(instruction);
+            self.registers.pc = next_pc;
+            cycles
+        } else {
+            let instruction_str = if prefixed {
+                format!("0xCB{:02X}", opcode_byte)
+            } else {
+                format!("0x{:02X}", opcode_byte)
+            };
+            panic!(
+                "Unknown instruction {} at PC=0x{:04X}",
+                instruction_str, self.registers.pc
+            );
+        }
     }
 
     /// Check if the CPU is currently in HALT state.
@@ -803,8 +895,16 @@ impl CPU {
     }
 
     fn jump_relative(&mut self, should_jump: bool) -> u16 {
+        // Fetch the signed 8-bit offset using read_next_byte().
+        // This centralises operand reads and makes the intent explicit:
+        // the offset byte is the operand at PC+1 and the relative jump is
+        // calculated from the address after the instruction (PC + 2).
+        //
+        // Using read_next_byte() keeps operand access consistent with other
+        // places that read immediates (e.g. LD, ADDSP) and avoids subtle
+        // mistakes where callers might also advance PC incorrectly.
+        let offset_byte = self.read_next_byte() as i8;
         if should_jump {
-            let offset_byte = self.bus.read_byte(self.registers.pc + 1) as i8;
             (self.registers.pc.wrapping_add(2) as i16).wrapping_add(offset_byte as i16) as u16
         } else {
             self.registers.pc.wrapping_add(2)

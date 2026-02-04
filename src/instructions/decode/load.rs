@@ -82,6 +82,46 @@ pub fn decode(byte: u8) -> Option<Instruction> {
 
     // ===== SPECIAL MEMORY LOADS =====
     match byte {
+        0x0A => {
+            return Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::A,
+                LoadByteSource::BCI, // Assuming you have BCI in your enum
+            )))
+        }
+        // LD (BC), A - Store A to address pointed to by BC
+        0x02 => {
+            return Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::BCI,
+                LoadByteSource::A,
+            )))
+        }
+        0x08 => {
+            return Some(Instruction::LD(LoadType::Word(
+                LoadWordTarget::A16I,
+                LoadWordSource::SP,
+            )))
+        }
+        // LD (HL+), A - Store A to (HL), then increment HL
+        0x22 => {
+            return Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::HLI_INC,
+                LoadByteSource::A,
+            )))
+        }
+        // LD (HL-), A - Store A to (HL), then decrement HL
+        0x32 => {
+            return Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::HLI_DEC,
+                LoadByteSource::A,
+            )))
+        }
+        // LD A, (DE) - Load A from address pointed to by DE
+        0x1A => {
+            return Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::A,
+                LoadByteSource::DEI,
+            )))
+        }
         // LD A, (HL+) - Load from (HL), then increment HL
         0x2A => {
             return Some(Instruction::LD(LoadType::Byte(
