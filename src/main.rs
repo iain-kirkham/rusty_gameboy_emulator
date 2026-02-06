@@ -4,12 +4,13 @@
 //! with per-cycle hardware ticking (timer, GPU, etc.).
 
 mod cpu;
+mod flag_helpers;
 mod gpu;
 mod instructions;
+mod interrupts;
 mod memory_bus;
 mod register;
 mod timer;
-mod flag_helpers;
 
 use crate::cpu::CPU;
 use std::fs;
@@ -43,23 +44,13 @@ fn main() {
                 break;
             }
 
-
-
             let t_cycles = cpu.step() as usize;
 
             // Advance per-T-cycle hardware (Timer, GPU/PPU, DMA, etc.)
             for _ in 0..t_cycles {
-                // Tick timer once per T-cycle. Returns true when the TIMA->TMA reload finished,
-                // which indicates the timer interrupt should be requested.
-                let timer_interrupt = cpu.bus.tick_timer();
-
-                if timer_interrupt {
-                    // Request Timer interrupt by setting IF bit 2 (0xFF0F bit mask 0b0000_0100).
-                    // Replace this with interrupt controller.
-                    let if_addr: u16 = 0xFF0F;
-                    let current_if = cpu.bus.read_byte(if_addr);
-                    cpu.bus.write_byte(if_addr, current_if | 0b0000_0100);
-                }
+                // Tick timer once per T-cycle. Timer interrupt is automatically
+                // requested via the interrupt controller when TIMA overflows.
+                cpu.bus.tick_timer();
 
                 // TODO: Tick other per-T-cycle systems here (GPU/PPU, DMA timing, etc.)
             }

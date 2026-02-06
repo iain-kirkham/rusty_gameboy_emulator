@@ -9,6 +9,7 @@ use crate::register::{Register16, Register8};
 pub enum IncDecTarget {
     Reg8(Register8),
     Reg16(Register16),
+    HLI, // Memory address pointed to by HL
 }
 
 #[derive(Debug, Copy, Clone)]

@@ -6,6 +6,7 @@
 //! for the canonical description of each memory region.
 
 use crate::gpu;
+use crate::interrupts::{Interrupt, InterruptController};
 use crate::timer::Timer;
 
 /// Memory Bus implementing the Game Boy memory map:
@@ -51,8 +52,6 @@ const IO_REGISTERS_END: usize = 0xFF7F;
 const HRAM_START: usize = 0xFF80;
 const HRAM_END: usize = 0xFFFE;
 
-const INTERRUPT_ENABLE_REGISTER: usize = 0xFFFF;
-
 // Specific I/O register addresses
 const SERIAL_TRANSFER_DATA: usize = 0xFF01; // SB register
 const SERIAL_TRANSFER_CONTROL: usize = 0xFF02; // SC register
@@ -69,6 +68,7 @@ pub struct MemoryBus {
     pub memory: [u8; MEM_SIZE],
     pub gpu: gpu::GPU,
     pub timer: Timer,
+    pub interrupts: InterruptController,
     pub serial_output: Vec<u8>,
 }
 
@@ -86,6 +86,7 @@ impl MemoryBus {
             memory,
             gpu: gpu::GPU::new(),
             timer: Timer::new(),
+            interrupts: InterruptController::new(),
             serial_output: Vec::new(),
         }
     }
@@ -106,12 +107,13 @@ impl MemoryBus {
             OAM_START..=OAM_END => self.memory[address],
             SERIAL_TRANSFER_DATA | SERIAL_TRANSFER_CONTROL => self.memory[address],
             // Timer registers (0xFF04-0xFF07) are handled by the timer module
-            0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => {
-                self.timer.read(address as u16)
-            }
+            0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => self.timer.read(address as u16),
+            // Interrupt Flag register (0xFF0F)
+            0xFF0F => self.interrupts.read_if(),
             IO_REGISTERS_START..=IO_REGISTERS_END => self.memory[address],
             HRAM_START..=HRAM_END => self.memory[address],
-            INTERRUPT_ENABLE_REGISTER => self.memory[address],
+            // Interrupt Enable register (0xFFFF)
+            0xFFFF => self.interrupts.read_ie(),
             _ => UNMAPPED_MEMORY_VALUE,
         }
     }
@@ -125,7 +127,7 @@ impl MemoryBus {
             WORK_RAM_START..=WORK_RAM_BANK1_END => self.memory[address] = value,
             ECHO_RAM_START..=ECHO_RAM_END => {
                 self.memory[address - ECHO_RAM_MIRROR_OFFSET] = value;
-            },
+            }
             OAM_START..=OAM_END => self.memory[address] = value,
             SERIAL_TRANSFER_DATA => {
                 // Store the value in the SB hardware register so reads return it
@@ -149,9 +151,12 @@ impl MemoryBus {
             0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => {
                 self.timer.write(address as u16, value);
             }
+            // Interrupt Flag register (0xFF0F)
+            0xFF0F => self.interrupts.write_if(value),
             IO_REGISTERS_START..=IO_REGISTERS_END => self.memory[address] = value,
             HRAM_START..=HRAM_END => self.memory[address] = value,
-            INTERRUPT_ENABLE_REGISTER => self.memory[address] = value,
+            // Interrupt Enable register (0xFFFF)
+            0xFFFF => self.interrupts.write_ie(value),
             _ => {} // Ignore writes to unmapped areas
         }
     }
@@ -172,12 +177,24 @@ impl MemoryBus {
         !self.serial_output.is_empty()
     }
 
-    /// Tick the timer by one T-cycle and return if a timer interrupt should fire
+    /// Tick the timer by one T-cycle and request timer interrupt if needed.
     ///
     /// This must be called once per T-cycle in the emulation loop.
-    /// The return value indicates whether the timer interrupt (IF register bit 2)
-    /// should be set this cycle.
-    pub fn tick_timer(&mut self) -> bool {
-        self.timer.tick()
+    /// If the timer overflows, the timer interrupt is automatically requested.
+    pub fn tick_timer(&mut self) {
+        if self.timer.tick() {
+            self.interrupts.request_interrupt(Interrupt::Timer);
+        }
+    }
+
+    /// Request an interrupt.
+    #[allow(dead_code)]
+    pub fn request_interrupt(&mut self, interrupt: Interrupt) {
+        self.interrupts.request_interrupt(interrupt);
+    }
+
+    /// Check if any interrupt is pending (for HALT wake-up).
+    pub fn any_interrupt_pending(&self) -> bool {
+        self.interrupts.any_interrupt_pending()
     }
 }
