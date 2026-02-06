@@ -113,6 +113,8 @@ pub enum Instruction {
     // ===== CONTROL =====
     /// No operation
     NOP,
+    /// Stop CPU and LCD until button press (STOP)
+    STOP,
     /// Halt CPU until interrupt
     HALT,
     /// Disable interrupts (DI)

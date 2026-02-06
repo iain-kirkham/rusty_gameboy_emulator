@@ -1,7 +1,7 @@
 //! Increment and decrement instruction decoder module.
 //!
 //! This module decodes increment and decrement instructions that operate
-//! on both 8-bit and 16-bit registers.
+//! on both 8-bit and 16-bit registers, as well as memory at (HL).
 
 use crate::instructions::{IncDecTarget, Instruction};
 use crate::register::{Register16::*, Register8::*};
@@ -17,6 +17,7 @@ pub fn decode(byte: u8) -> Option<Instruction> {
         0x1C => Some(Instruction::INC(IncDecTarget::Reg8(E))),
         0x24 => Some(Instruction::INC(IncDecTarget::Reg8(H))),
         0x2C => Some(Instruction::INC(IncDecTarget::Reg8(L))),
+        0x34 => Some(Instruction::INC(IncDecTarget::HLI)),
         0x3C => Some(Instruction::INC(IncDecTarget::Reg8(A))),
 
         // ===== INC 16-bit =====
@@ -32,6 +33,7 @@ pub fn decode(byte: u8) -> Option<Instruction> {
         0x1D => Some(Instruction::DEC(IncDecTarget::Reg8(E))),
         0x25 => Some(Instruction::DEC(IncDecTarget::Reg8(H))),
         0x2D => Some(Instruction::DEC(IncDecTarget::Reg8(L))),
+        0x35 => Some(Instruction::DEC(IncDecTarget::HLI)),
         0x3D => Some(Instruction::DEC(IncDecTarget::Reg8(A))),
 
         // ===== DEC 16-bit =====
@@ -93,6 +95,22 @@ mod tests {
         assert!(matches!(
             decode(0x3B),
             Some(Instruction::DEC(IncDecTarget::Reg16(SP)))
+        ));
+    }
+
+    #[test]
+    fn test_inc_hli() {
+        assert!(matches!(
+            decode(0x34),
+            Some(Instruction::INC(IncDecTarget::HLI))
+        ));
+    }
+
+    #[test]
+    fn test_dec_hli() {
+        assert!(matches!(
+            decode(0x35),
+            Some(Instruction::DEC(IncDecTarget::HLI))
         ));
     }
 

@@ -8,13 +8,14 @@ use crate::instructions::{
     ArithmeticTarget, IncDecTarget, Instruction, JumpTest, LoadByteSource, LoadByteTarget,
     LoadType, LoadWordSource, LoadWordTarget, StackTarget,
 };
+use crate::interrupts::INTERRUPT_CYCLES;
 use crate::memory_bus::MemoryBus;
 use crate::register::{self, Register16, Registers};
 
 pub(crate) struct CPU {
-    pub registers: register::Registers, // All general-purpose registers and flags
-    pub bus: MemoryBus,                 // Memory bus
-    is_halted: bool,                    // Whether the CPU is in HALT.
+    pub registers: register::Registers,
+    pub bus: MemoryBus,
+    is_halted: bool,
     pub interrupts_enabled: bool,
 }
 
@@ -38,6 +39,11 @@ impl CPU {
     fn execute(&mut self, instruction: Instruction) -> (u16, u16) {
         match instruction {
             Instruction::NOP => (self.registers.pc.wrapping_add(1), 4),
+            // STOP: Stops CPU and LCD execution until a button press occurs.
+            Instruction::STOP => {
+                self.is_halted = true;
+                (self.registers.pc.wrapping_add(2), 4)
+            }
             // HALT: Stops CPU execution until an interrupt occurs.
             Instruction::HALT => {
                 self.is_halted = true;
@@ -57,25 +63,45 @@ impl CPU {
                 let value = self.get_arithmetic_target(target);
                 let new_value = self.add(value);
                 self.registers.a = new_value;
-                (self.registers.pc.wrapping_add(1), 4)
+                let (pc_inc, cycles) = match target {
+                    ArithmeticTarget::D8 => (2, 8),
+                    ArithmeticTarget::HLI => (1, 8),
+                    _ => (1, 4),
+                };
+                (self.registers.pc.wrapping_add(pc_inc), cycles)
             }
             Instruction::ADC(target) => {
                 let value = self.get_arithmetic_target(target);
                 let new_value = self.adc(value);
                 self.registers.a = new_value;
-                (self.registers.pc.wrapping_add(1), 4)
+                let (pc_inc, cycles) = match target {
+                    ArithmeticTarget::D8 => (2, 8),
+                    ArithmeticTarget::HLI => (1, 8),
+                    _ => (1, 4),
+                };
+                (self.registers.pc.wrapping_add(pc_inc), cycles)
             }
             Instruction::SUB(target) => {
                 let value = self.get_arithmetic_target(target);
                 let new_value = self.sub(value);
                 self.registers.a = new_value;
-                (self.registers.pc.wrapping_add(1), 4)
+                let (pc_inc, cycles) = match target {
+                    ArithmeticTarget::D8 => (2, 8),
+                    ArithmeticTarget::HLI => (1, 8),
+                    _ => (1, 4),
+                };
+                (self.registers.pc.wrapping_add(pc_inc), cycles)
             }
             Instruction::SBC(target) => {
                 let value = self.get_arithmetic_target(target);
                 let new_value = self.sbc(value);
                 self.registers.a = new_value;
-                (self.registers.pc.wrapping_add(1), 4)
+                let (pc_inc, cycles) = match target {
+                    ArithmeticTarget::D8 => (2, 8),
+                    ArithmeticTarget::HLI => (1, 8),
+                    _ => (1, 4),
+                };
+                (self.registers.pc.wrapping_add(pc_inc), cycles)
             }
             // Logical operations on A register
             Instruction::AND(target) => {
@@ -96,22 +122,33 @@ impl CPU {
                 let value = self.get_arithmetic_target(target);
                 let new_value = self.or(value);
                 self.registers.a = new_value;
-                (self.registers.pc.wrapping_add(1), 4)
+                let (pc_inc, cycles) = match target {
+                    ArithmeticTarget::D8 => (2, 8),
+                    ArithmeticTarget::HLI => (1, 8),
+                    _ => (1, 4),
+                };
+                (self.registers.pc.wrapping_add(pc_inc), cycles)
             }
             Instruction::XOR(target) => {
                 let value = self.get_arithmetic_target(target);
                 let new_value = self.xor(value);
                 self.registers.a = new_value;
-                (self.registers.pc.wrapping_add(1), 4)
+                let (pc_inc, cycles) = match target {
+                    ArithmeticTarget::D8 => (2, 8),
+                    ArithmeticTarget::HLI => (1, 8),
+                    _ => (1, 4),
+                };
+                (self.registers.pc.wrapping_add(pc_inc), cycles)
             }
             Instruction::CP(target) => {
                 let value = self.get_arithmetic_target(target);
                 self.cp(value);
-                let pc_increment = match target {
-                    ArithmeticTarget::D8 => 2,
-                    _ => 1,
+                let (pc_inc, cycles) = match target {
+                    ArithmeticTarget::D8 => (2, 8),
+                    ArithmeticTarget::HLI => (1, 8),
+                    _ => (1, 4),
                 };
-                (self.registers.pc.wrapping_add(pc_increment), 4)
+                (self.registers.pc.wrapping_add(pc_inc), cycles)
             }
             // Increment/Decrement instructions (8-bit and 16-bit)
             Instruction::INC(target) => match target {
@@ -125,6 +162,13 @@ impl CPU {
                     self.inc_16bit(reg);
                     (self.registers.pc.wrapping_add(1), 8)
                 }
+                IncDecTarget::HLI => {
+                    let address = self.registers.get_hl();
+                    let value = self.bus.read_byte(address);
+                    let new_value = self.inc_8bit(value);
+                    self.bus.write_byte(address, new_value);
+                    (self.registers.pc.wrapping_add(1), 12)
+                }
             },
             Instruction::DEC(target) => match target {
                 IncDecTarget::Reg8(reg) => {
@@ -136,6 +180,13 @@ impl CPU {
                 IncDecTarget::Reg16(reg) => {
                     self.dec_16bit(reg);
                     (self.registers.pc.wrapping_add(1), 8)
+                }
+                IncDecTarget::HLI => {
+                    let address = self.registers.get_hl();
+                    let value = self.bus.read_byte(address);
+                    let new_value = self.dec_8bit(value);
+                    self.bus.write_byte(address, new_value);
+                    (self.registers.pc.wrapping_add(1), 12)
                 }
             },
             // Control flow: Jumps and relative jumps
@@ -165,6 +216,7 @@ impl CPU {
                         LoadByteSource::HLI_DEC => 8,
                         LoadByteSource::BCI => 8,
                         LoadByteSource::DEI => 8, // LD (DE),r
+                        LoadByteSource::CI => 8,  // LD A,(C) or LD (C),A
                         LoadByteSource::A => 4,
                         LoadByteSource::B => 4,
                         LoadByteSource::C => 4,
@@ -289,23 +341,11 @@ impl CPU {
             // Miscellaneous special arithmetic operations
             Instruction::DAA => {
                 // Decimal Adjust Accumulator (DAA)
-                //
-                // Correct behavior:
-                // - If previous operation was an addition (N flag clear):
-                //     - If H set OR low nibble > 9 => add 0x06
-                //     - If C set OR A > 0x99 => add 0x60 and set carry
-                // - If previous operation was a subtraction (N flag set):
-                //     - If H set => subtract 0x06
-                //     - If C set => subtract 0x60
-                // - Z = (A == 0)
-                // - H = 0
-                // - C updated according to rules above (use local carry to avoid early mutation)
                 let mut a = self.registers.a;
                 let mut adjust: u8 = 0;
                 let mut carry = self.registers.f.carry;
 
                 if !self.registers.f.subtract {
-                    // Addition case
                     if self.registers.f.half_carry || (a & 0x0F) > 9 {
                         adjust |= 0x06;
                     }
@@ -315,7 +355,6 @@ impl CPU {
                     }
                     a = a.wrapping_add(adjust);
                 } else {
-                    // Subtraction case
                     if self.registers.f.half_carry {
                         adjust |= 0x06;
                     }
@@ -374,7 +413,6 @@ impl CPU {
             }
             Instruction::ADDSP => {
                 // ADDSP: Add signed 8-bit immediate to SP (flags set from lower 8 bits)
-                // Read signed immediate (used for result) and use helper functions for flags.
                 let offset_signed = self.read_next_byte() as i8;
                 let sp = self.registers.sp;
                 let result = fh::add_sp_signed(sp, offset_signed);
@@ -576,6 +614,10 @@ impl CPU {
                 let address = 0xFF00 + offset as u16;
                 self.bus.read_byte(address)
             }
+            LoadByteSource::CI => {
+                let address = 0xFF00 + self.registers.c as u16;
+                self.bus.read_byte(address)
+            }
         }
     }
 
@@ -611,6 +653,10 @@ impl CPU {
                 let address = self.registers.get_hl();
                 self.bus.write_byte(address, value);
                 self.registers.set_hl(address.wrapping_sub(1));
+            }
+            LoadByteTarget::CI => {
+                let address = 0xFF00 + self.registers.c as u16;
+                self.bus.write_byte(address, value);
             }
         }
     }
@@ -791,8 +837,17 @@ impl CPU {
     /// # Unknown Instructions
     /// Panics on unknown opcodes to make missing implementations obvious during development.
     pub(crate) fn step(&mut self) -> u16 {
+        if self.bus.any_interrupt_pending() {
+            self.wake_from_halt();
+        }
+
+        if let Some(cycles) = self.handle_interrupts() {
+            return cycles;
+        }
+
         if self.is_halted {
-            return 0;
+            // CPU is halted and no interrupt to service, consume 4 T-cycles
+            return 4;
         }
 
         // Read first opcode byte and determine if it's a CB-prefix
@@ -868,10 +923,42 @@ impl CPU {
     }
 
     /// Wake the CPU from HALT state when an enabled interrupt becomes pending.
-    /// TODO: Call this method when interrupt handling is fully implemented.
-    #[allow(dead_code)]
     fn wake_from_halt(&mut self) {
         self.is_halted = false;
+    }
+
+    /// Handle pending interrupts if IME is enabled.
+    ///
+    /// If an interrupt is pending and IME is set:
+    /// 1. Disable IME
+    /// 2. Push current PC onto stack
+    /// 3. Clear the interrupt flag bit
+    /// 4. Jump to interrupt handler
+    ///
+    /// Returns Some(cycles) if an interrupt was serviced, None otherwise.
+    fn handle_interrupts(&mut self) -> Option<u16> {
+        // Only service interrupts if IME is enabled
+        if !self.interrupts_enabled {
+            return None;
+        }
+
+        // Get the highest priority pending interrupt
+        let interrupt = self.bus.interrupts.get_pending_interrupt()?;
+
+        // Disable IME
+        self.interrupts_enabled = false;
+
+        // Push current PC onto stack
+        self.push(self.registers.pc);
+
+        // Service the interrupt (clears IF bit) and get handler address
+        let handler_address = self.bus.interrupts.service_interrupt(interrupt);
+
+        // Jump to handler
+        self.registers.pc = handler_address;
+
+        // Return the number of cycles consumed
+        Some(INTERRUPT_CYCLES)
     }
 
     /// Evaluate a jump condition based on CPU flags.

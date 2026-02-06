@@ -8,8 +8,8 @@ use crate::instructions::{ArithmeticTarget, Instruction};
 /// Decode arithmetic and logical instructions
 /// These instructions operate on the A register and various source operands
 pub fn decode(byte: u8) -> Option<Instruction> {
-    // ADD A, r instructions (0x80-0x87, excluding 0x86 which uses (HL))
-    if (0x80..=0x87).contains(&byte) && byte != 0x86 {
+    // ADD A, r instructions (0x80-0x87, including 0x86 for (HL))
+    if (0x80..=0x87).contains(&byte) {
         return ArithmeticTarget::from_lower_bits(byte).map(Instruction::ADD);
     }
 
@@ -32,10 +32,6 @@ pub fn decode(byte: u8) -> Option<Instruction> {
     if (0xA0..=0xA7).contains(&byte) {
         return ArithmeticTarget::from_lower_bits(byte).map(Instruction::AND);
     }
-    
-    if byte == 0xE6 {
-        return Some(Instruction::AND(ArithmeticTarget::D8));
-    }
 
     // XOR A, r instructions (0xA8-0xAF)
     if (0xA8..=0xAF).contains(&byte) {
@@ -52,9 +48,16 @@ pub fn decode(byte: u8) -> Option<Instruction> {
         return ArithmeticTarget::from_lower_bits(byte).map(Instruction::CP);
     }
 
+    // Immediate arithmetic instructions
     match byte {
-        0xFE => return Some(Instruction::CP(ArithmeticTarget::D8)),
-        0xC6 => return Some(Instruction::ADD(ArithmeticTarget::D8)),
+        0xC6 => return Some(Instruction::ADD(ArithmeticTarget::D8)), // ADD A, d8
+        0xCE => return Some(Instruction::ADC(ArithmeticTarget::D8)), // ADC A, d8
+        0xD6 => return Some(Instruction::SUB(ArithmeticTarget::D8)), // SUB d8
+        0xDE => return Some(Instruction::SBC(ArithmeticTarget::D8)), // SBC A, d8
+        0xE6 => return Some(Instruction::AND(ArithmeticTarget::D8)), // AND d8
+        0xEE => return Some(Instruction::XOR(ArithmeticTarget::D8)), // XOR d8
+        0xF6 => return Some(Instruction::OR(ArithmeticTarget::D8)),  // OR d8
+        0xFE => return Some(Instruction::CP(ArithmeticTarget::D8)),  // CP d8
         _ => {}
     }
 
@@ -75,8 +78,10 @@ mod tests {
             decode(0x87),
             Some(Instruction::ADD(ArithmeticTarget::A))
         ));
-        // 0x86 would be ADD A, (HL) which returns None from from_lower_bits
-        assert!(decode(0x86).is_none());
+        assert!(matches!(
+            decode(0x86),
+            Some(Instruction::ADD(ArithmeticTarget::HLI))
+        ));
     }
 
     #[test]
@@ -160,6 +165,42 @@ mod tests {
         assert!(matches!(
             decode(0xBF),
             Some(Instruction::CP(ArithmeticTarget::A))
+        ));
+    }
+
+    #[test]
+    fn test_immediate_instructions() {
+        assert!(matches!(
+            decode(0xC6),
+            Some(Instruction::ADD(ArithmeticTarget::D8))
+        ));
+        assert!(matches!(
+            decode(0xCE),
+            Some(Instruction::ADC(ArithmeticTarget::D8))
+        ));
+        assert!(matches!(
+            decode(0xD6),
+            Some(Instruction::SUB(ArithmeticTarget::D8))
+        ));
+        assert!(matches!(
+            decode(0xDE),
+            Some(Instruction::SBC(ArithmeticTarget::D8))
+        ));
+        assert!(matches!(
+            decode(0xE6),
+            Some(Instruction::AND(ArithmeticTarget::D8))
+        ));
+        assert!(matches!(
+            decode(0xEE),
+            Some(Instruction::XOR(ArithmeticTarget::D8))
+        ));
+        assert!(matches!(
+            decode(0xF6),
+            Some(Instruction::OR(ArithmeticTarget::D8))
+        ));
+        assert!(matches!(
+            decode(0xFE),
+            Some(Instruction::CP(ArithmeticTarget::D8))
         ));
     }
 

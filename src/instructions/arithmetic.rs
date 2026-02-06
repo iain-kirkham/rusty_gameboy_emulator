@@ -13,7 +13,7 @@ pub enum ArithmeticTarget {
     H,
     L,
     HLI,
-    D8
+    D8,
 }
 
 impl ArithmeticTarget {
@@ -52,6 +52,9 @@ mod tests {
             ArithmeticTarget::from_lower_bits(0x85), // bits = 0b10000101, lower 3 = 0b101 = 5
             Some(ArithmeticTarget::L)
         ));
-        assert!(ArithmeticTarget::from_lower_bits(0x06).is_none());
+        assert!(matches!(
+            ArithmeticTarget::from_lower_bits(0x06),
+            Some(ArithmeticTarget::HLI)
+        ));
     }
 }

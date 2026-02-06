@@ -11,8 +11,7 @@ use crate::instructions::{
 /// These instructions move data between registers, memory, and immediate values
 pub fn decode(byte: u8) -> Option<Instruction> {
     // ===== REGISTER-TO-REGISTER LOADS (0x40-0x7F, excluding 0x76 HALT) =====
-    // Pattern: 01 dst(3 bits) src(3 bits)
-    // This compact encoding covers all combinations of 8-bit register loads
+    // This covers all combinations of 8-bit register loads
     if (0x40..=0x7F).contains(&byte) && byte != 0x76 {
         return decode_register_load(byte);
     }
@@ -73,7 +72,6 @@ pub fn decode(byte: u8) -> Option<Instruction> {
 
     // ===== IMMEDIATE WORD LOADS (LD rr, d16) =====
     // Load a 16-bit immediate value into a register pair
-    // Use the bit-extraction helper to determine the register pair.
     if matches!(byte, 0x01 | 0x11 | 0x21 | 0x31) {
         if let Some(dst) = LoadWordTarget::from_bits(byte) {
             return Some(Instruction::LD(LoadType::Word(dst, LoadWordSource::D16)));
@@ -85,8 +83,8 @@ pub fn decode(byte: u8) -> Option<Instruction> {
         0x0A => {
             return Some(Instruction::LD(LoadType::Byte(
                 LoadByteTarget::A,
-                LoadByteSource::BCI, // Assuming you have BCI in your enum
-            )))
+                LoadByteSource::BCI,
+            )));
         }
         // LD (BC), A - Store A to address pointed to by BC
         0x02 => {
@@ -169,6 +167,20 @@ pub fn decode(byte: u8) -> Option<Instruction> {
             return Some(Instruction::LD(LoadType::Byte(
                 LoadByteTarget::A,
                 LoadByteSource::A8I,
+            )))
+        }
+        // LD (C), A - Store A to high RAM (0xFF00 + C)
+        0xE2 => {
+            return Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::CI,
+                LoadByteSource::A,
+            )))
+        }
+        // LD A, (C) - Load A from high RAM (0xFF00 + C)
+        0xF2 => {
+            return Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::A,
+                LoadByteSource::CI,
             )))
         }
         _ => {}
@@ -303,6 +315,27 @@ mod tests {
             Some(Instruction::LD(LoadType::Byte(
                 LoadByteTarget::A,
                 LoadByteSource::A8I
+            )))
+        ));
+    }
+
+    #[test]
+    fn test_c_indirect_loads() {
+        // LD (C), A
+        assert!(matches!(
+            decode(0xE2),
+            Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::CI,
+                LoadByteSource::A
+            )))
+        ));
+
+        // LD A, (C)
+        assert!(matches!(
+            decode(0xF2),
+            Some(Instruction::LD(LoadType::Byte(
+                LoadByteTarget::A,
+                LoadByteSource::CI
             )))
         ));
     }

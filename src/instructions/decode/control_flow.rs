@@ -21,50 +21,50 @@ pub fn decode(byte: u8) -> Option<Instruction> {
     match byte {
         // ===== BASIC CONTROL =====
         0x00 => Some(Instruction::NOP),
+        0x10 => Some(Instruction::STOP),
         0x76 => Some(Instruction::HALT),
-        0xF3 => Some(Instruction::DI), // Disable interrupts
-        0xFB => Some(Instruction::EI), // Enable interrupts
+        0xF3 => Some(Instruction::DI),
+        0xFB => Some(Instruction::EI),
 
         // ===== ROTATE ACCUMULATOR =====
-        0x07 => Some(Instruction::RLCA), // Rotate A left circular
-        0x0F => Some(Instruction::RRCA), // Rotate A right circular
-        0x17 => Some(Instruction::RLA),  // Rotate A left through carry
-        0x1F => Some(Instruction::RRA),  // Rotate A right through carry
+        0x07 => Some(Instruction::RLCA),
+        0x0F => Some(Instruction::RRCA),
+        0x17 => Some(Instruction::RLA),
+        0x1F => Some(Instruction::RRA),
 
         // ===== MISCELLANEOUS ARITHMETIC =====
-        0x27 => Some(Instruction::DAA), // Decimal Adjust Accumulator
-        0x2F => Some(Instruction::CPL), // Complement A
-        0x37 => Some(Instruction::SCF), // Set Carry Flag
-        0x3F => Some(Instruction::CCF), // Complement Carry Flag
+        0x27 => Some(Instruction::DAA),
+        0x2F => Some(Instruction::CPL),
+        0x37 => Some(Instruction::SCF),
+        0x3F => Some(Instruction::CCF),
 
         // ===== JUMPS (JP) =====
-        0xC3 => Some(Instruction::JP(JumpTest::Always)), // JP nn
-        0xC2 | 0xCA | 0xD2 | 0xDA => JumpTest::from_bits(byte).map(Instruction::JP), // JP cc, nn
-        0xE9 => Some(Instruction::JP_HL),                // JP (HL) - jump to address in HL
+        0xC3 => Some(Instruction::JP(JumpTest::Always)),
+        0xC2 | 0xCA | 0xD2 | 0xDA => JumpTest::from_bits(byte).map(Instruction::JP),
+        0xE9 => Some(Instruction::JP_HL),
 
         // ===== RELATIVE JUMPS (JR) =====
-        0x18 => Some(Instruction::JR(JumpTest::Always)), // JR r8 (unconditional)
-        0x20 | 0x28 | 0x30 | 0x38 => JumpTest::from_bits(byte).map(Instruction::JR), // JR cc, r8
+        0x18 => Some(Instruction::JR(JumpTest::Always)),
+        0x20 | 0x28 | 0x30 | 0x38 => JumpTest::from_bits(byte).map(Instruction::JR),
 
         // ===== CALLS =====
-        0xCD => Some(Instruction::CALL(JumpTest::Always)), // CALL nn
-        0xC4 | 0xCC | 0xD4 | 0xDC => JumpTest::from_bits(byte).map(Instruction::CALL), // CALL cc, nn
+        0xCD => Some(Instruction::CALL(JumpTest::Always)),
+        0xC4 | 0xCC | 0xD4 | 0xDC => JumpTest::from_bits(byte).map(Instruction::CALL),
 
         // ===== RETURNS =====
-        0xC9 => Some(Instruction::RET(JumpTest::Always)), // RET
-        0xC0 | 0xC8 | 0xD0 | 0xD8 => JumpTest::from_bits(byte).map(Instruction::RET), // RET cc
-        0xD9 => Some(Instruction::RETI),                  // RETI - Return and enable interrupts
+        0xC9 => Some(Instruction::RET(JumpTest::Always)),
+        0xC0 | 0xC8 | 0xD0 | 0xD8 => JumpTest::from_bits(byte).map(Instruction::RET),
+        0xD9 => Some(Instruction::RETI),
 
         // ===== RESTARTS (RST) =====
-        // These are single-byte CALLs to fixed addresses
-        0xC7 => Some(Instruction::RST(0x00)), // RST 00H
-        0xCF => Some(Instruction::RST(0x08)), // RST 08H
-        0xD7 => Some(Instruction::RST(0x10)), // RST 10H
-        0xDF => Some(Instruction::RST(0x18)), // RST 18H
-        0xE7 => Some(Instruction::RST(0x20)), // RST 20H
-        0xEF => Some(Instruction::RST(0x28)), // RST 28H
-        0xF7 => Some(Instruction::RST(0x30)), // RST 30H
-        0xFF => Some(Instruction::RST(0x38)), // RST 38H
+        0xC7 => Some(Instruction::RST(0x00)),
+        0xCF => Some(Instruction::RST(0x08)),
+        0xD7 => Some(Instruction::RST(0x10)),
+        0xDF => Some(Instruction::RST(0x18)),
+        0xE7 => Some(Instruction::RST(0x20)),
+        0xEF => Some(Instruction::RST(0x28)),
+        0xF7 => Some(Instruction::RST(0x30)),
+        0xFF => Some(Instruction::RST(0x38)),
         _ => None,
     }
 }
@@ -76,6 +76,7 @@ mod tests {
     #[test]
     fn test_basic_control() {
         assert!(matches!(decode(0x00), Some(Instruction::NOP)));
+        assert!(matches!(decode(0x10), Some(Instruction::STOP)));
         assert!(matches!(decode(0x76), Some(Instruction::HALT)));
         assert!(matches!(decode(0xF3), Some(Instruction::DI)));
         assert!(matches!(decode(0xFB), Some(Instruction::EI)));
@@ -213,6 +214,6 @@ mod tests {
 
     #[test]
     fn test_invalid_opcode() {
-        assert!(decode(0x80).is_none()); // ADD A, B
+        assert!(decode(0x80).is_none());
     }
 }
