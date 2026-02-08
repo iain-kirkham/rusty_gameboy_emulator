@@ -5,7 +5,7 @@
 //! This module implements the emulator's memory map. See the linked pandocs page
 //! for the canonical description of each memory region.
 
-use crate::gpu;
+use crate::ppu;
 use crate::interrupts::{Interrupt, InterruptController};
 use crate::timer::Timer;
 
@@ -66,7 +66,7 @@ const UNMAPPED_MEMORY_VALUE: u8 = 0xFF;
 
 pub struct MemoryBus {
     pub memory: [u8; MEM_SIZE],
-    pub gpu: gpu::GPU,
+    pub gpu: ppu::GPU,
     pub timer: Timer,
     pub interrupts: InterruptController,
     pub serial_output: Vec<u8>,
@@ -84,7 +84,7 @@ impl MemoryBus {
 
         MemoryBus {
             memory,
-            gpu: gpu::GPU::new(),
+            gpu: ppu::GPU::new(),
             timer: Timer::new(),
             interrupts: InterruptController::new(),
             serial_output: Vec::new(),

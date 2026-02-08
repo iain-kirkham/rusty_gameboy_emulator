@@ -5,7 +5,7 @@
 
 mod cpu;
 mod flag_helpers;
-mod gpu;
+mod ppu;
 mod instructions;
 mod interrupts;
 mod memory_bus;
