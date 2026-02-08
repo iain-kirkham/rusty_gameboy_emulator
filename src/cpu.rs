@@ -264,7 +264,16 @@ impl CPU {
             Instruction::RET(test) => {
                 let should = self.should_jump(&test);
                 let next_pc = self.return_(should);
-                let cycles = if should { 20 } else { 8 };
+                let cycles = match test {
+                    JumpTest::Always => 16,
+                    _ => {
+                        if should {
+                            20
+                        } else {
+                            8
+                        }
+                    }
+                };
                 (next_pc, cycles)
             }
             // RETI: Return from interrupt handler (pops PC and enables interrupts)
