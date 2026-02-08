@@ -207,24 +207,7 @@ impl CPU {
                 LoadType::Byte(target, source) => {
                     let source_value = self.read_byte_source(source);
                     self.write_byte_target(target, source_value);
-                    let cycles = match source {
-                        LoadByteSource::D8 => 8,    // LD r, d8
-                        LoadByteSource::A16I => 16, // LD A,(a16)
-                        LoadByteSource::A8I => 12,  // LD A,(0xFF00+o)
-                        LoadByteSource::HLI => 8,   // LD r,(HL)
-                        LoadByteSource::HLI_INC => 8,
-                        LoadByteSource::HLI_DEC => 8,
-                        LoadByteSource::BCI => 8,
-                        LoadByteSource::DEI => 8, // LD (DE),r
-                        LoadByteSource::CI => 8,  // LD A,(C) or LD (C),A
-                        LoadByteSource::A => 4,
-                        LoadByteSource::B => 4,
-                        LoadByteSource::C => 4,
-                        LoadByteSource::D => 4,
-                        LoadByteSource::E => 4,
-                        LoadByteSource::H => 4,
-                        LoadByteSource::L => 4,
-                    };
+                    let cycles = self.get_load_byte_cycles(target, source);
 
                     (
                         self.registers
@@ -672,6 +655,44 @@ impl CPU {
             (_, LoadByteSource::D8) => 2,
             _ => 1,
         }
+    }
+
+    /// Compute T-cycle cost for LD byte operations based on both target and source.
+    fn get_load_byte_cycles(&self, target: LoadByteTarget, source: LoadByteSource) -> u16 {
+        let base = match source {
+            LoadByteSource::D8 => 8,
+            LoadByteSource::A16I => 16,
+            LoadByteSource::A8I => 12,
+            LoadByteSource::HLI => 8,
+            LoadByteSource::HLI_INC => 8,
+            LoadByteSource::HLI_DEC => 8,
+            LoadByteSource::BCI => 8,
+            LoadByteSource::DEI => 8,
+            LoadByteSource::CI => 8,
+            LoadByteSource::A => 4,
+            LoadByteSource::B => 4,
+            LoadByteSource::C => 4,
+            LoadByteSource::D => 4,
+            LoadByteSource::E => 4,
+            LoadByteSource::H => 4,
+            LoadByteSource::L => 4,
+        };
+
+        // Additional cost when the target is a memory location (different for
+        // no-immediate, 8-bit immediate, and 16-bit immediate target addressing)
+        let extra = match target {
+            LoadByteTarget::HLI
+            | LoadByteTarget::HLI_INC
+            | LoadByteTarget::HLI_DEC
+            | LoadByteTarget::BCI
+            | LoadByteTarget::DEI
+            | LoadByteTarget::CI => 4,
+            LoadByteTarget::A8I => 8,
+            LoadByteTarget::A16I => 12,
+            _ => 0,
+        };
+
+        base + extra
     }
 
     /// Fetch the value from an 8-bit arithmetic target register.
