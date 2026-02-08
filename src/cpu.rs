@@ -17,6 +17,8 @@ pub(crate) struct CPU {
     pub bus: MemoryBus,
     is_halted: bool,
     pub interrupts_enabled: bool,
+    ei_pending: bool,
+    halt_bug: bool,
 }
 
 impl CPU {
@@ -28,6 +30,8 @@ impl CPU {
             bus,
             is_halted: false,
             interrupts_enabled: false,
+            ei_pending: false,
+            halt_bug: false,
         }
     }
 
@@ -45,17 +49,24 @@ impl CPU {
                 (self.registers.pc.wrapping_add(2), 4)
             }
             // HALT: Stops CPU execution until an interrupt occurs.
+            // HALT bug: When IME=0 and there's a pending interrupt, PC fails to increment
             Instruction::HALT => {
-                self.is_halted = true;
+                if !self.interrupts_enabled && self.bus.any_interrupt_pending() {
+                    // HALT bug condition: don't halt, but set flag to skip PC increment on next fetch
+                    self.halt_bug = true;
+                } else {
+                    self.is_halted = true;
+                }
                 (self.registers.pc.wrapping_add(1), 4)
             }
             // DI/EI: Interrupt control instructions
             Instruction::DI => {
                 self.interrupts_enabled = false;
+                self.ei_pending = false;
                 (self.registers.pc.wrapping_add(1), 4)
             }
             Instruction::EI => {
-                self.interrupts_enabled = true;
+                self.ei_pending = true;
                 (self.registers.pc.wrapping_add(1), 4)
             }
             // Arithmetic operations on A register
@@ -930,9 +941,24 @@ impl CPU {
                 );
             }
 
+            // HALT bug: When set, decrement PC before execution so operand reads
+            // happen at the wrong address (byte after HALT is read twice)
+            let halt_bug_active = self.halt_bug;
+            if halt_bug_active {
+                self.halt_bug = false;
+                self.registers.pc = self.registers.pc.wrapping_sub(1);
+            }
+
             // Execute the decoded instruction and advance PC
             let (next_pc, cycles) = self.execute(instruction);
             self.registers.pc = next_pc;
+
+            // Handle EI delay: IME is enabled after the instruction following EI completes
+            if self.ei_pending {
+                self.ei_pending = false;
+                self.interrupts_enabled = true;
+            }
+
             cycles
         } else {
             let instruction_str = if prefixed {
