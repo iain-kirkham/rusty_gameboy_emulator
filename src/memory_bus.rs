@@ -5,8 +5,8 @@
 //! This module implements the emulator's memory map. See the linked pandocs page
 //! for the canonical description of each memory region.
 
-use crate::ppu;
 use crate::interrupts::{Interrupt, InterruptController};
+use crate::ppu;
 use crate::timer::Timer;
 
 /// Memory Bus implementing the Game Boy memory map:
@@ -108,6 +108,8 @@ impl MemoryBus {
             SERIAL_TRANSFER_DATA | SERIAL_TRANSFER_CONTROL => self.memory[address],
             // Timer registers (0xFF04-0xFF07) are handled by the timer module
             0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => self.timer.read(address as u16),
+            // LCD registers (0xFF40-0xFF4B) are handled by the PPU
+            0xFF40..=0xFF4B => self.gpu.read_register(address as u16),
             // Interrupt Flag register (0xFF0F)
             0xFF0F => self.interrupts.read_if(),
             IO_REGISTERS_START..=IO_REGISTERS_END => self.memory[address],
@@ -151,6 +153,8 @@ impl MemoryBus {
             0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => {
                 self.timer.write(address as u16, value);
             }
+            // LCD registers (0xFF40-0xFF4B) are handled by the PPU
+            0xFF40..=0xFF4B => self.gpu.write_register(address as u16, value),
             // Interrupt Flag register (0xFF0F)
             0xFF0F => self.interrupts.write_if(value),
             IO_REGISTERS_START..=IO_REGISTERS_END => self.memory[address] = value,
