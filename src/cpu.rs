@@ -117,11 +117,8 @@ impl CPU {
             // Logical operations on A register
             Instruction::AND(target) => {
                 let value = self.get_arithmetic_target(target);
-                self.registers.a &= value;
-                self.registers.f.zero = self.registers.a == 0;
-                self.registers.f.subtract = false;
-                self.registers.f.half_carry = true;
-                self.registers.f.carry = false;
+                let new_value = self.and(value);
+                self.registers.a = new_value;
                 let (pc_inc, cycles) = match target {
                     ArithmeticTarget::D8 => (2, 8),
                     ArithmeticTarget::HLI => (1, 8),
