@@ -2,7 +2,7 @@
 
 A work-in-progress Nintendo **Game Boy (DMG-01)** emulator written in Rust.
 
-This project is currently has basic, **CPU + memory bus + timer + interrupts** foundation in place and is now focused on developing the PPU and cartridge support.
+This project is currently has basic **CPU + memory bus + timer + interrupts** functionality and is now focused on developing the PPU and cartridge support.
 
 ## Current Status
 
