@@ -1,60 +1,108 @@
 # Rusty Game Boy Emulator
 
-A Game Boy emulator written in Rust, currently in early development.
+A work-in-progress Nintendo **Game Boy (DMG-01)** emulator written in Rust.
 
-## 🎯 Project Goals
+This project is currently has basic, **CPU + memory bus + timer + interrupts** foundation in place and is now focused on developing the PPU and cartridge support.
 
-- Build a cycle-accurate emulator for the original Game Boy (DMG-01)
-- Run Blargg’s CPU test ROMs for validation
-- Learn systems programming, emulation, and low-level architecture
-- Eventually add Game Boy Color support
+## Current Status
 
-## 🚧 Current Status
+### Implemented / Working
+- **CPU core**
+  - 8-bit registers, `PC`, `SP`, flags, stack operations
+  - The base instruction set has been implemented
+  - **CB-prefixed instruction set** implemented (rotates/shifts/bit ops/`SWAP`, including `(HL)` variants)
+  - Control flow: `JP`, `JR`, `CALL`, `RET`, `RETI`, `RST`, `HALT`, `DI`/`EI` (with EI-delay handling)
+- **Memory bus**
+  - Address-decoding scaffolding and basic read/write
+  - Internal RAM handling
+  - VRAM access support at the bus level (not fully implemented PPU yet)
+- **Timer**
+  - Timer ticking integrated into the main execution loop (ticks per T-cycle)
+  - Timer interrupt request on overflow
+- **Interrupt system**
+  - Interrupt enable/flag management and interrupt handling in the CPU step
 
-**Early Development:** The Majority of CPU operations implemented, basic memory bus, basic timer functions, no PPU/APU yet.
+### Partially Implemented
+- **PPU/GPU module exists** (VRAM + tile decoding + LCD register storage), but:
+  - No scanline timing/state machine yet
+  - No framebuffer composition
+  - No window/background/sprite rendering pipeline
+  - Not currently wired into a real-time renderer loop
 
-### ✅ Implemented Features
+### Not Implemented Yet
+- **Cartridge / MBC**
+  - ROM loading exists for local test ROM execution, but full MBC support is not complete
+- **Real-time rendering loop**
+  - `winit` + `pixels` are added as dependencies, but rendering is not hooked up
+- **Joypad input**
+- **Save states**
+- **APU/audio** (Low Priority)
+- **Boot ROM behaviour / full hardware accuracy** 
 
-- **CPU Core**: 8-bit registers, program counter, stack pointer
-- **Instruction Execution**:
-  - Arithmetic & logic (register forms): `ADD`, `ADC`, `SUB`, `SBC`, `AND`, `XOR`, `OR`, `CP`
-  - 16-bit arithmetic and related: `ADD HL, rr` (0x09 / 0x19 / 0x29 / 0x39), `ADD SP, r8` (0xE8), `LD HL, SP+r8` (0xF8), `LD SP, HL` (0xF9)
-  - Control flow & miscellaneous: `NOP`, `HALT`, `DI`, `EI`, `RLCA`, `RRCA`, `RLA`, `RRA`, `DAA`, `CPL`, `SCF`, `CCF`, `JP` (including `JP (HL)`), `JR`, `CALL`, `RET`, `RETI`, `RST`
-  - Load operations: register-to-register `LD r, r'` (0x40-0x7F excluding 0x76), immediate byte/word loads `LD r,d8` and `LD rr,d16`, `LD A,(HL+)`, `LD A,(HL-)`, `LD (DE),A`, `LD (a16),A`, `LD A,(a16)`, `LDH (a8),A`, `LDH A,(a8)`
-  - Increment / Decrement: `INC` / `DEC` for 8-bit and 16-bit targets
-  - Stack operations: `PUSH` / `POP` for BC/DE/HL/AF
-  - CB-prefixed instructions: full CB set implemented - `RLC`, `RRC`, `RL`, `RR`, `SLA`, `SRA`, `SWAP`, `SRL`, `BIT`, `RES`, `SET` (all targets, including HLI)
-- **Memory Bus**:
-  - Basic address decoding and read/write support
-  - Internal RAM and basic VRAM access
+## Running
 
-### 🔄 In Progress
+### Prerequisites
+- Rust toolchain (stable) installed via `rustup`
 
-- Expanding the instruction set to support Blargg test ROMs
-- Memory bus improvements for full address space coverage
-- ROM loading functionality
-- Timer implementation
+### Run the current tests (Blargg CPU instruction tests)
+The current `main` is set up to run a Blargg CPU test ROM and print serial output emitted by the ROM.
 
-### 📋 TODO
+1. Ensure test ROMs exist at the expected path:
+   - `blargg/cpu_instrs/individual/01-special.gb`
 
-- [ ] Complete instruction set
-- [ ] Implement the Interrupt Enable/Flag system
-- [ ] Timer implementation
-- [ ] Add PPU (Picture Processing Unit) for graphics
-- [ ] Add Audio Processing Unit (APU)
-- [ ] Joypad input via keyboard
-- [ ] ROM loading and cartridge support
-- [ ] Save state functionality
+2. Run:
+   - `cargo run`
 
+The emulator loop:
+- steps the CPU,
+- ticks the timer **per T-cycle**, and
+- prints **serial output** as soon as it appears (used by test ROMs to report PASS/FAIL).
 
-## 📚 Reference Material
-### Game Boy Documentation
-- [Pan Docs](https://gbdev.io/pandocs/) - Comprehensive Game Boy technical reference
-- [Interactive Game Boy Opcode Table](https://meganesu.github.io/generate-gb-opcodes/)
-- [Game Boy: Complete Technical Reference](https://gekkio.fi/files/gb-docs/gbctr.pdf)
-- [Real boy Emulator blog](https://realboyemulator.wordpress.com/)
-- [ASMSchool lessons](http://gameboy.mongenel.com/asmschool.html)
+> If you want to run a different ROM, edit the `test_roms` list in `src/main.rs`.
+
+## Project Layout (high level)
+
+- `src/main.rs` - current entry point / test runner loop (CPU stepping + timer ticking + serial output)
+- `src/cpu.rs` - CPU implementation and instruction execution
+- `src/insturctions` - instruction model defines the decoded instructions
+- `src/instructions/decode` - decoding all instructions for the CPU to execute
+- `src/memory_bus.rs` - bus and address mapping
+- `src/timer.rs` - DIV/TIMA/TMA/TAC timer logic
+- `src/interrupts.rs` - interrupt controller
+- `src/ppu.rs` - early GPU/PPU scaffolding (VRAM + tile decoding + LCD registers)
+- `src/instructions/` - instruction decoding/implementation details
+
+## Roadmap
+
+### Graphics (PPU)
+- Implement PPU timing/state machine (OAM Search / Pixel Transfer / HBlank / VBlank)
+- Correct LY/STAT behaviour and LCD interrupts
+- Produce a framebuffer and connect it to `pixels` + `winit`
+
+### Longer-term
+- Implement proper **MBC and cartridge support** (MBC3 is the priority)
+- DMA behavior and timing
+- Joypad input mapping
+- Audio (APU)
+- Save states
+- Game Boy Color (CGB) support (after DMG baseline is solid)
+
+## Notes
+- This is not yet a playable emulator. It’s currently a cpu focused core with a test ROM runner.
+- The CPU timing is not currently real world and will run at unlimited speed.
+- Expect behavior differences vs hardware in unimplemented areas (PPU/APU/MBC/DMA).
+
+## References
+
+### Documentation
+- Pan Docs: https://gbdev.io/pandocs/
+- Opcode table: https://meganesu.github.io/generate-gb-opcodes/
+- Game Boy: Complete Technical Reference (PDF): https://gekkio.fi/files/gb-docs/gbctr.pdf
+- RGBDS :https://rgbds.gbdev.io/docs/v1.0.1/gbz80.7
+- Gameboy development community: https://gbdev.io/
+- Realboy emulator blog: https://realboyemulator.wordpress.com/
+- ASMSchool lessons: http://gameboy.mongenel.com/asmschool.html
 
 ### Test ROMs
-- [Blargg's Test ROMs](https://github.com/retrio/gb-test-roms)
-- [Mooneye Test Suite](https://github.com/Gekkio/mooneye-test-suite)
+- Blargg GB test ROMs: https://github.com/retrio/gb-test-roms
+- Mooneye test suite: https://github.com/Gekkio/mooneye-test-suite
