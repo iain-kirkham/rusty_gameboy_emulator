@@ -3,15 +3,17 @@
 //! This module orchestrates the emulation loop, loading ROMs and running CPU cycles
 //! with per-cycle hardware ticking (timer, GPU, etc.).
 
+mod cartridge_header;
 mod cpu;
 mod flag_helpers;
-mod ppu;
 mod instructions;
 mod interrupts;
 mod memory_bus;
+mod ppu;
 mod register;
 mod timer;
 
+use crate::cartridge_header::CartridgeHeader;
 use crate::cpu::CPU;
 use std::fs;
 use std::io::{self, Write};
@@ -32,6 +34,15 @@ fn main() {
                 continue;
             }
         };
+
+        match CartridgeHeader::parse(&rom_data) {
+            Ok(header) => {
+                println!("{}", header.summary_line());
+            }
+            Err(e) => {
+                println!("Could not parse cartridge header: {e}");
+            }
+        }
 
         let mut cpu = CPU::new(rom_data);
         let mut cycle_count: u64 = 0;
