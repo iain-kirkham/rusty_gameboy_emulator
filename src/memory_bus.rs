@@ -153,6 +153,28 @@ impl MemoryBus {
             0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => {
                 self.timer.write(address as u16, value);
             }
+            // DMA (OAM DMA) register - immediate 160-byte copy
+            // Writing to 0xFF46 starts a DMA transfer from (value << 8) to OAM (0xFE00)
+            // Implement a simple immediate copy (no timing emulation) as a quick win.
+            0xFF46 => {
+                // Update GPU DMA register for visibility
+                self.gpu.write_register(address as u16, value);
+
+                // Source base address is value * 0x100
+                let base = (value as usize) << 8;
+                // Copy 160 bytes into OAM (0xFE00..0xFE9F)
+                for i in 0..160usize {
+                    let src = base.wrapping_add(i);
+                    let dst = 0xFE00usize + i;
+
+                    // Read source byte using read_byte so ROM/Vram/timer/io handling is respected
+                    // If src is out of range, treat as 0xFF (read_byte already handles unmapped)
+                    let byte = self.read_byte(src as u16);
+                    // Write directly into OAM region memory to avoid re-entering this write_byte path
+                    self.memory[dst] = byte;
+                }
+            }
+
             // LCD registers (0xFF40-0xFF4B) are handled by the PPU
             0xFF40..=0xFF4B => self.gpu.write_register(address as u16, value),
             // Interrupt Flag register (0xFF0F)

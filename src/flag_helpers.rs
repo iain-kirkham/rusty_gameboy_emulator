@@ -105,6 +105,55 @@ pub fn mask_f(value: u8) -> u8 {
     value & 0xF0
 }
 
+/// Rotate left circular: bit 7 becomes bit 0 and carry-out.
+pub fn rotate_left_circular(value: u8) -> (u8, bool) {
+    let carry = (value & 0x80) != 0;
+    (value.rotate_left(1), carry)
+}
+
+/// Rotate right circular: bit 0 becomes bit 7 and carry-out.
+pub fn rotate_right_circular(value: u8) -> (u8, bool) {
+    let carry = (value & 0x01) != 0;
+    (value.rotate_right(1), carry)
+}
+
+/// Rotate left through carry: old carry enters bit 0, bit 7 becomes carry-out.
+pub fn rotate_left_through_carry(value: u8, carry_in: bool) -> (u8, bool) {
+    let carry_out = (value & 0x80) != 0;
+    let result = (value << 1) | u8::from(carry_in);
+    (result, carry_out)
+}
+
+/// Rotate right through carry: old carry enters bit 7, bit 0 becomes carry-out.
+pub fn rotate_right_through_carry(value: u8, carry_in: bool) -> (u8, bool) {
+    let carry_out = (value & 0x01) != 0;
+    let result = (value >> 1) | (u8::from(carry_in) << 7);
+    (result, carry_out)
+}
+
+/// Shift left arithmetic: bit 0 becomes 0, bit 7 becomes carry-out.
+pub fn shift_left_arithmetic(value: u8) -> (u8, bool) {
+    let carry = (value & 0x80) != 0;
+    (value << 1, carry)
+}
+
+/// Shift right arithmetic: keeps bit 7, bit 0 becomes carry-out.
+pub fn shift_right_arithmetic(value: u8) -> (u8, bool) {
+    let carry = (value & 0x01) != 0;
+    ((value >> 1) | (value & 0x80), carry)
+}
+
+/// Shift right logical: bit 7 becomes 0, bit 0 becomes carry-out.
+pub fn shift_right_logical(value: u8) -> (u8, bool) {
+    let carry = (value & 0x01) != 0;
+    (value >> 1, carry)
+}
+
+/// Swap upper and lower nibbles.
+pub fn swap_nibbles(value: u8) -> u8 {
+    value.rotate_left(4)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,5 +222,24 @@ mod tests {
     fn test_mask_f() {
         assert_eq!(mask_f(0xFF), 0xF0);
         assert_eq!(mask_f(0x0F), 0x00);
+    }
+
+    #[test]
+    fn test_rotate_and_shift_helpers() {
+        assert_eq!(rotate_left_circular(0x81), (0x03, true));
+        assert_eq!(rotate_right_circular(0x01), (0x80, true));
+
+        assert_eq!(rotate_left_through_carry(0x80, false), (0x00, true));
+        assert_eq!(rotate_left_through_carry(0x00, true), (0x01, false));
+
+        assert_eq!(rotate_right_through_carry(0x01, false), (0x00, true));
+        assert_eq!(rotate_right_through_carry(0x00, true), (0x80, false));
+
+        assert_eq!(shift_left_arithmetic(0x81), (0x02, true));
+        assert_eq!(shift_right_arithmetic(0x81), (0xC0, true));
+        assert_eq!(shift_right_logical(0x81), (0x40, true));
+
+        assert_eq!(swap_nibbles(0xF0), 0x0F);
+        assert_eq!(swap_nibbles(0xAB), 0xBA);
     }
 }
