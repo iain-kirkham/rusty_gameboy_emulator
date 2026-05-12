@@ -200,8 +200,11 @@ impl CPU {
         self.registers.f.carry = carry;
     }
 
-    fn prefixed_result_for_target(&self, target: &PrefixTarget) -> (u16, u16) {
-        self.instruction_result(2, Self::get_prefix_cycles(target))
+    fn prefixed_result_for_target(&self, target: &PrefixTarget, memory_cycles: u16) -> (u16, u16) {
+        match target.to_register8() {
+            Some(_) => self.instruction_result(2, 8),
+            None => self.instruction_result(2, memory_cycles),
+        }
     }
 
     fn apply_prefixed_rotate_shift_flags(&mut self, result: u8, carry: bool) {
@@ -393,7 +396,7 @@ impl CPU {
                     if self.registers.f.half_carry || (a & 0x0F) > 9 {
                         adjust |= 0x06;
                     }
-                    if carry || a > 0x99 {
+                    if self.registers.f.carry || a > 0x99 {
                         adjust |= 0x60;
                         carry = true;
                     }
@@ -402,8 +405,9 @@ impl CPU {
                     if self.registers.f.half_carry {
                         adjust |= 0x06;
                     }
-                    if carry {
+                    if self.registers.f.carry {
                         adjust |= 0x60;
+                        carry = true;
                     }
                     a = a.wrapping_sub(adjust);
                 }
@@ -476,56 +480,56 @@ impl CPU {
                 let (result, carry) = fh::rotate_left_circular(value);
                 self.write_prefix_target(target, result);
                 self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::RRC(target) => {
                 let value = self.read_prefix_target(target);
                 let (result, carry) = fh::rotate_right_circular(value);
                 self.write_prefix_target(target, result);
                 self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::RL(target) => {
                 let value = self.read_prefix_target(target);
                 let (result, carry) = fh::rotate_left_through_carry(value, self.registers.f.carry);
                 self.write_prefix_target(target, result);
                 self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::RR(target) => {
                 let value = self.read_prefix_target(target);
                 let (result, carry) = fh::rotate_right_through_carry(value, self.registers.f.carry);
                 self.write_prefix_target(target, result);
                 self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::SLA(target) => {
                 let value = self.read_prefix_target(target);
                 let (result, carry) = fh::shift_left_arithmetic(value);
                 self.write_prefix_target(target, result);
                 self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::SRA(target) => {
                 let value = self.read_prefix_target(target);
                 let (result, carry) = fh::shift_right_arithmetic(value);
                 self.write_prefix_target(target, result);
                 self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::SWAP(target) => {
                 let value = self.read_prefix_target(target);
                 let result = fh::swap_nibbles(value);
                 self.write_prefix_target(target, result);
                 self.apply_prefixed_rotate_shift_flags(result, false);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::SRL(target) => {
                 let value = self.read_prefix_target(target);
                 let (result, carry) = fh::shift_right_logical(value);
                 self.write_prefix_target(target, result);
                 self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::BIT(bit, target) => {
                 let value = self.read_prefix_target(target);
@@ -533,31 +537,23 @@ impl CPU {
                 self.registers.f.zero = result == 0;
                 self.registers.f.subtract = false;
                 self.registers.f.half_carry = true;
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 12)
             }
             Instruction::RES(bit, target) => {
                 let value = self.read_prefix_target(target);
                 let result = value & !(1 << bit);
                 self.write_prefix_target(target, result);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             Instruction::SET(bit, target) => {
                 let value = self.read_prefix_target(target);
                 let result = value | (1 << bit);
                 self.write_prefix_target(target, result);
-                self.prefixed_result_for_target(&target)
+                self.prefixed_result_for_target(&target, 16)
             }
             _ => unreachable!("execute_prefixed_instruction called with non-prefixed instruction"),
         }
     }
 
-    /// Calculate T-state cycles for CB-prefixed instructions.
-    /// Returns 8 cycles for register targets or 16 cycles for memory (HL) targets.
-    fn get_prefix_cycles(target: &PrefixTarget) -> u16 {
-        match target.to_register8() {
-            Some(_) => 8,
-            None => 16,
-        }
-    }
 }
 

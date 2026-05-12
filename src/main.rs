@@ -14,12 +14,34 @@ mod register;
 mod timer;
 
 use crate::cartridge_header::CartridgeHeader;
-use crate::cpu::CPU;
+use crate::cpu::{CpuTraceState, CPU};
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, BufWriter, Write};
+use std::path::Path;
+
+fn write_doctor_log_line(trace: &CpuTraceState, writer: &mut BufWriter<fs::File>) {
+    let _ = writeln!(
+        writer,
+        "A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
+        trace.a,
+        trace.f,
+        trace.b,
+        trace.c,
+        trace.d,
+        trace.e,
+        trace.h,
+        trace.l,
+        trace.sp,
+        trace.pc,
+        trace.pcmem[0],
+        trace.pcmem[1],
+        trace.pcmem[2],
+        trace.pcmem[3]
+    );
+}
 
 fn main() {
-    let test_roms = vec!["blargg/cpu_instrs/individual/01-special.gb"];
+    let test_roms = vec!["blargg/cpu_instrs/individual/11-op a,(hl).gb"];
 
     for rom_path in test_roms {
         println!("==========================================");
@@ -44,24 +66,37 @@ fn main() {
             }
         }
 
+        let log_name = Path::new(rom_path)
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("doctor");
+        let log_path = format!("doctor_{}.log", log_name);
+        let log_file = fs::File::create(&log_path).expect("Failed to create doctor log file");
+        let mut log_writer = BufWriter::new(log_file);
+
         let mut cpu = CPU::new(rom_data);
         let mut cycle_count: u64 = 0;
-        const MAX_CYCLES: u64 = 10_000_000; // 10 million T-states should be enough
+        const MAX_CYCLES: u64 = 900_000_000; // 10 million T-states should be enough
 
         // Run the emulation until max cycles or until CPU halts
         while cycle_count < MAX_CYCLES {
-            if cpu.is_halted() {
-                println!("\n CPU halted after {} cycles", cycle_count);
-                break;
-            }
 
             let t_cycles = cpu.step() as usize;
+
+            if cpu.last_step_executed_opcode() {
+                if let Some(trace) = cpu.take_last_trace() {
+                    write_doctor_log_line(&trace, &mut log_writer);
+                }
+            }
 
             // Advance per-T-cycle hardware (Timer, GPU/PPU, DMA, etc.)
             for _ in 0..t_cycles {
                 // Tick timer once per T-cycle. Timer interrupt is automatically
                 // requested via the interrupt controller when TIMA overflows.
                 cpu.bus.tick_timer();
+
+                // Advance PPU timing one T-cycle at a time.
+                cpu.bus.gpu.tick(1);
 
                 // TODO: Tick other per-T-cycle systems here (GPU/PPU, DMA timing, etc.)
             }

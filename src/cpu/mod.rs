@@ -29,6 +29,22 @@ pub(crate) struct CPU {
     pub interrupts_enabled: bool,
     ei_pending: bool,
     halt_bug: bool,
+    last_step_executed_opcode: bool,
+    last_trace: Option<CpuTraceState>,
+}
+
+pub(crate) struct CpuTraceState {
+    pub a: u8,
+    pub f: u8,
+    pub b: u8,
+    pub c: u8,
+    pub d: u8,
+    pub e: u8,
+    pub h: u8,
+    pub l: u8,
+    pub sp: u16,
+    pub pc: u16,
+    pub pcmem: [u8; 4],
 }
 
 impl CPU {
@@ -42,6 +58,8 @@ impl CPU {
             interrupts_enabled: false,
             ei_pending: false,
             halt_bug: false,
+            last_step_executed_opcode: false,
+            last_trace: None,
         }
     }
 
@@ -59,15 +77,39 @@ impl CPU {
     /// # Unknown Instructions
     /// Panics on unknown opcodes to make missing implementations obvious during development.
     pub(crate) fn step(&mut self) -> u16 {
+        self.last_step_executed_opcode = false;
+        self.last_trace = None;
         if let Some(cycles) = self.process_pre_instruction_state() {
             return cycles;
         }
+
+        let pc = self.registers.pc;
+        let pcmem = [
+            self.bus.read_byte(pc),
+            self.bus.read_byte(pc.wrapping_add(1)),
+            self.bus.read_byte(pc.wrapping_add(2)),
+            self.bus.read_byte(pc.wrapping_add(3)),
+        ];
+        self.last_trace = Some(CpuTraceState {
+            a: self.registers.a,
+            f: self.registers.f.to_byte(),
+            b: self.registers.b,
+            c: self.registers.c,
+            d: self.registers.d,
+            e: self.registers.e,
+            h: self.registers.h,
+            l: self.registers.l,
+            sp: self.registers.sp,
+            pc,
+            pcmem,
+        });
 
         let (prefixed, opcode_byte, instruction) = self.fetch_and_decode_instruction();
         self.trace_instruction(prefixed, opcode_byte, &instruction);
 
         self.apply_halt_bug_if_needed();
         let cycles = self.execute_and_advance_pc(instruction);
+        self.last_step_executed_opcode = true;
         self.commit_ei_if_pending();
 
         cycles
@@ -115,17 +157,22 @@ impl CPU {
         }
     }
 
-    /// Check if the CPU is currently in HALT state.
-    pub(crate) fn is_halted(&self) -> bool {
-        self.is_halted
+    /// Returns whether the last executed step was an actual opcode (as opposed to a NOP during HALT).
+    pub(crate) fn last_step_executed_opcode(&self) -> bool {
+        self.last_step_executed_opcode
     }
+
+    pub(crate) fn take_last_trace(&mut self) -> Option<CpuTraceState> {
+        self.last_trace.take()
+    }
+
 
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::instructions::JumpTest;
+    use crate::instructions::{JumpTest};
     use crate::interrupts::{Interrupt, INTERRUPT_CYCLES};
 
     fn cpu_with_program(program: &[u8]) -> CPU {

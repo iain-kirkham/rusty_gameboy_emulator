@@ -99,7 +99,7 @@ impl Registers {
             c: 0x13,
             d: 0x00,
             e: 0xD8,
-            f: FlagsRegister::from_byte(0xC0),
+            f: FlagsRegister::from_byte(0xB0),
             h: 0x01,
             l: 0x4D,
             sp: 0xFFFE,
