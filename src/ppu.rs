@@ -51,6 +51,7 @@ pub(crate) struct GPU {
     obp1: u8, // 0xFF49 - OBJ Palette 1 Data
     wy: u8,   // 0xFF4A - Window Y Position
     wx: u8,   // 0xFF4B - Window X Position
+    dot_clock: u32,
 }
 
 impl GPU {
@@ -70,6 +71,33 @@ impl GPU {
             obp1: 0xFF,
             wy: 0,
             wx: 0,
+            dot_clock: 0,
+        }
+    }
+
+    /// Advance PPU timing by a batch of CPU cycles.
+    pub fn tick(&mut self, cycles: u16) {
+        self.dot_clock += cycles as u32;
+
+        while self.dot_clock >= 456 {
+            self.dot_clock -= 456;
+            self.ly = (self.ly + 1) % 154;
+
+            if self.ly >= 144 {
+                // Mode 1 (V-Blank)
+                self.stat = (self.stat & 0xFC) | 0x01;
+            }
+        }
+
+        if self.ly < 144 {
+            self.stat = (self.stat & 0xFC)
+                | if self.dot_clock <= 80 {
+                    0x02
+                } else if self.dot_clock <= 252 {
+                    0x03
+                } else {
+                    0x00
+                };
         }
     }
 
@@ -177,8 +205,8 @@ impl GPU {
             SCY_ADDR => self.scy = value,
             SCX_ADDR => self.scx = value,
             LY_ADDR => {
-                // LY is read-only in hardware, but we allow writing for emulation purposes
-                self.ly = value;
+                // LY is read-only in hardware; writes reset it to 0.
+                self.ly = 0;
             }
             LYC_ADDR => self.lyc = value,
             DMA_ADDR => self.dma = value,
