@@ -78,7 +78,7 @@ impl MemoryBus {
         let copy_len = std::cmp::min(rom_data.len(), MEM_SIZE);
         memory[..copy_len].copy_from_slice(&rom_data[..copy_len]);
 
-        // Initialize serial registers to sensible defaults so reads behave predictably.
+        // Initialise serial registers to sensible defaults so reads behave predictably.
         memory[SERIAL_TRANSFER_DATA] = 0x00;
         memory[SERIAL_TRANSFER_CONTROL] = SERIAL_CONTROL_IDLE;
 
@@ -137,10 +137,14 @@ impl MemoryBus {
             }
             SERIAL_TRANSFER_CONTROL => {
                 // If bit 7 is set, start a transfer. Use `read_byte` so any special
-                // behavior for reading SB (0xFF01) is preserved.
+                // behaviour for reading SB (0xFF01) is preserved.
                 if value & 0x80 != 0 {
                     let character = self.read_byte(0xFF01);
                     self.serial_output.push(character);
+
+                    if value == 0x81 {
+                        print!("{}", character as char);
+                    }
 
                     // Reset bit 7 to signal transfer complete while preserving other bits
                     self.memory[SERIAL_TRANSFER_CONTROL] = value & 0x7F;

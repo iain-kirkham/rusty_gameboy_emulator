@@ -4,7 +4,7 @@
 //! arithmetic operations (ADD/ADC/SUB/SBC, INC/DEC, ADD SP, r8, LD HL, SP+r8).
 //!
 //! The Game Boy's rules for half-carry/half-borrow and SP+r8 flag calculation
-//! are subtle. These helpers encode the canonical behaviors:
+//! are subtle. These helpers encode the canonical behaviours:
 //! - half-carry for 8-bit add/adc is carry from bit 3 -> 4
 //! - half-borrow for 8-bit sub/sbc is borrow from bit 4 -> 3
 //! - INC/DEC test H differently (based only on the operand before change)
