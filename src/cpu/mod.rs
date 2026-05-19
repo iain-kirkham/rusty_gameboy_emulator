@@ -157,6 +157,24 @@ impl CPU {
         }
     }
 
+    /// Set CPU flags for logical operations (AND/OR/XOR).
+    /// Clears N and C flags; sets Z if result is zero; sets H based on operation.
+    fn set_logic_flags(&mut self, result: u8, half_carry: bool) {
+        self.registers.f.zero = result == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = half_carry;
+        self.registers.f.carry = false;
+    }
+
+    /// Set CPU flags for arithmetic operations (ADD/SUB/INC/DEC).
+    /// Updates Z, N, H, and C flags based on operation results.
+    fn set_arithmetic_flags(&mut self, result: u8, subtract: bool, carry: bool, half_carry: bool) {
+        self.registers.f.zero = result == 0;
+        self.registers.f.subtract = subtract;
+        self.registers.f.carry = carry;
+        self.registers.f.half_carry = half_carry;
+    }
+
     /// Returns whether the last executed step was an actual opcode (as opposed to a NOP during HALT).
     pub(crate) fn last_step_executed_opcode(&self) -> bool {
         self.last_step_executed_opcode
