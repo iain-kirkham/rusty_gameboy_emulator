@@ -142,9 +142,6 @@ impl MemoryBus {
                     let character = self.read_byte(0xFF01);
                     self.serial_output.push(character);
 
-                    if value == 0x81 {
-                        print!("{}", character as char);
-                    }
 
                     // Reset bit 7 to signal transfer complete while preserving other bits
                     self.memory[SERIAL_TRANSFER_CONTROL] = value & 0x7F;
