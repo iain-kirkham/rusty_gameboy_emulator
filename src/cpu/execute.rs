@@ -94,64 +94,46 @@ impl CPU {
     }
 
     fn execute_arithmetic_instruction(&mut self, instruction: Instruction) -> (u16, u16) {
-        match instruction {
-            Instruction::ADD(target) => {
-                let value = self.get_arithmetic_target(target);
-                let new_value = self.add(value);
-                self.registers.a = new_value;
-                let (pc_inc, cycles) = Self::arithmetic_timing(target);
-                self.instruction_result(pc_inc, cycles)
-            }
-            Instruction::ADC(target) => {
-                let value = self.get_arithmetic_target(target);
-                let new_value = self.adc(value);
-                self.registers.a = new_value;
-                let (pc_inc, cycles) = Self::arithmetic_timing(target);
-                self.instruction_result(pc_inc, cycles)
-            }
-            Instruction::SUB(target) => {
-                let value = self.get_arithmetic_target(target);
-                let new_value = self.sub(value);
-                self.registers.a = new_value;
-                let (pc_inc, cycles) = Self::arithmetic_timing(target);
-                self.instruction_result(pc_inc, cycles)
-            }
-            Instruction::SBC(target) => {
-                let value = self.get_arithmetic_target(target);
-                let new_value = self.sbc(value);
-                self.registers.a = new_value;
-                let (pc_inc, cycles) = Self::arithmetic_timing(target);
-                self.instruction_result(pc_inc, cycles)
-            }
-            Instruction::AND(target) => {
-                let value = self.get_arithmetic_target(target);
-                let new_value = self.and(value);
-                self.registers.a = new_value;
-                let (pc_inc, cycles) = Self::arithmetic_timing(target);
-                self.instruction_result(pc_inc, cycles)
-            }
-            Instruction::OR(target) => {
-                let value = self.get_arithmetic_target(target);
-                let new_value = self.or(value);
-                self.registers.a = new_value;
-                let (pc_inc, cycles) = Self::arithmetic_timing(target);
-                self.instruction_result(pc_inc, cycles)
-            }
-            Instruction::XOR(target) => {
-                let value = self.get_arithmetic_target(target);
-                let new_value = self.xor(value);
-                self.registers.a = new_value;
-                let (pc_inc, cycles) = Self::arithmetic_timing(target);
-                self.instruction_result(pc_inc, cycles)
-            }
-            Instruction::CP(target) => {
-                let value = self.get_arithmetic_target(target);
-                self.cp(value);
-                let (pc_inc, cycles) = Self::arithmetic_timing(target);
-                self.instruction_result(pc_inc, cycles)
-            }
-            _ => unreachable!("execute_arithmetic_instruction called with non-arithmetic instruction"),
+        enum ArithmeticOp {
+            Add,
+            Adc,
+            Sub,
+            Sbc,
+            And,
+            Or,
+            Xor,
+            Cp,
         }
+
+        let (target, op) = match instruction {
+            Instruction::ADD(target) => (target, ArithmeticOp::Add),
+            Instruction::ADC(target) => (target, ArithmeticOp::Adc),
+            Instruction::SUB(target) => (target, ArithmeticOp::Sub),
+            Instruction::SBC(target) => (target, ArithmeticOp::Sbc),
+            Instruction::AND(target) => (target, ArithmeticOp::And),
+            Instruction::OR(target) => (target, ArithmeticOp::Or),
+            Instruction::XOR(target) => (target, ArithmeticOp::Xor),
+            Instruction::CP(target) => (target, ArithmeticOp::Cp),
+            _ => unreachable!("execute_arithmetic_instruction called with non-arithmetic instruction"),
+        };
+
+        let value = self.get_arithmetic_target(target);
+
+        match op {
+            ArithmeticOp::Add => self.registers.a = self.add(value),
+            ArithmeticOp::Adc => self.registers.a = self.adc(value),
+            ArithmeticOp::Sub => self.registers.a = self.sub(value),
+            ArithmeticOp::Sbc => self.registers.a = self.sbc(value),
+            ArithmeticOp::And => self.registers.a = self.and(value),
+            ArithmeticOp::Or => self.registers.a = self.or(value),
+            ArithmeticOp::Xor => self.registers.a = self.xor(value),
+            ArithmeticOp::Cp => {
+                self.cp(value);
+            }
+        }
+
+        let (pc_inc, cycles) = Self::arithmetic_timing(target);
+        self.instruction_result(pc_inc, cycles)
     }
 
     fn arithmetic_timing(target: ArithmeticTarget) -> (u16, u16) {
@@ -556,4 +538,3 @@ impl CPU {
     }
 
 }
-
