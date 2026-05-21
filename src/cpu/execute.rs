@@ -202,46 +202,44 @@ impl CPU {
     }
 
     fn execute_inc_dec_instruction(&mut self, instruction: Instruction) -> (u16, u16) {
-        match instruction {
-            Instruction::INC(target) => match target {
-                IncDecTarget::Reg8(reg) => {
-                    let value = self.registers.read_8bit(reg);
-                    let new_value = self.inc_8bit(value);
-                    self.registers.write_8bit(reg, new_value);
-                    self.instruction_result(1, 4)
-                }
-                IncDecTarget::Reg16(reg) => {
-                    self.inc_16bit(reg);
-                    self.instruction_result(1, 8)
-                }
-                IncDecTarget::HLI => {
-                    let address = self.registers.get_hl();
-                    let value = self.bus.read_byte(address);
-                    let new_value = self.inc_8bit(value);
-                    self.bus.write_byte(address, new_value);
-                    self.instruction_result(1, 12)
-                }
-            },
-            Instruction::DEC(target) => match target {
-                IncDecTarget::Reg8(reg) => {
-                    let value = self.registers.read_8bit(reg);
-                    let new_value = self.dec_8bit(value);
-                    self.registers.write_8bit(reg, new_value);
-                    self.instruction_result(1, 4)
-                }
-                IncDecTarget::Reg16(reg) => {
-                    self.dec_16bit(reg);
-                    self.instruction_result(1, 8)
-                }
-                IncDecTarget::HLI => {
-                    let address = self.registers.get_hl();
-                    let value = self.bus.read_byte(address);
-                    let new_value = self.dec_8bit(value);
-                    self.bus.write_byte(address, new_value);
-                    self.instruction_result(1, 12)
-                }
-            },
+        enum IncDecOp {
+            Inc,
+            Dec,
+        }
+
+        let (target, op) = match instruction {
+            Instruction::INC(target) => (target, IncDecOp::Inc),
+            Instruction::DEC(target) => (target, IncDecOp::Dec),
             _ => unreachable!("execute_inc_dec_instruction called with non INC/DEC instruction"),
+        };
+
+        match target {
+            IncDecTarget::Reg8(reg) => {
+                let value = self.registers.read_8bit(reg);
+                let new_value = match op {
+                    IncDecOp::Inc => self.inc_8bit(value),
+                    IncDecOp::Dec => self.dec_8bit(value),
+                };
+                self.registers.write_8bit(reg, new_value);
+                self.instruction_result(1, 4)
+            }
+            IncDecTarget::Reg16(reg) => {
+                match op {
+                    IncDecOp::Inc => self.inc_16bit(reg),
+                    IncDecOp::Dec => self.dec_16bit(reg),
+                }
+                self.instruction_result(1, 8)
+            }
+            IncDecTarget::HLI => {
+                let address = self.registers.get_hl();
+                let value = self.bus.read_byte(address);
+                let new_value = match op {
+                    IncDecOp::Inc => self.inc_8bit(value),
+                    IncDecOp::Dec => self.dec_8bit(value),
+                };
+                self.bus.write_byte(address, new_value);
+                self.instruction_result(1, 12)
+            }
         }
     }
 
