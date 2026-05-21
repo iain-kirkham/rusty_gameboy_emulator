@@ -457,84 +457,83 @@ impl CPU {
 
     fn execute_prefixed_instruction(&mut self, instruction: Instruction) -> (u16, u16) {
         match instruction {
-            Instruction::RLC(target) => {
-                let value = self.read_prefix_target(target);
-                let (result, carry) = fh::rotate_left_circular(value);
-                self.write_prefix_target(target, result);
-                self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::RRC(target) => {
-                let value = self.read_prefix_target(target);
-                let (result, carry) = fh::rotate_right_circular(value);
-                self.write_prefix_target(target, result);
-                self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::RL(target) => {
-                let value = self.read_prefix_target(target);
-                let (result, carry) = fh::rotate_left_through_carry(value, self.registers.f.carry);
-                self.write_prefix_target(target, result);
-                self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::RR(target) => {
-                let value = self.read_prefix_target(target);
-                let (result, carry) = fh::rotate_right_through_carry(value, self.registers.f.carry);
-                self.write_prefix_target(target, result);
-                self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::SLA(target) => {
-                let value = self.read_prefix_target(target);
-                let (result, carry) = fh::shift_left_arithmetic(value);
-                self.write_prefix_target(target, result);
-                self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::SRA(target) => {
-                let value = self.read_prefix_target(target);
-                let (result, carry) = fh::shift_right_arithmetic(value);
-                self.write_prefix_target(target, result);
-                self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::SWAP(target) => {
-                let value = self.read_prefix_target(target);
-                let result = fh::swap_nibbles(value);
-                self.write_prefix_target(target, result);
-                self.apply_prefixed_rotate_shift_flags(result, false);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::SRL(target) => {
-                let value = self.read_prefix_target(target);
-                let (result, carry) = fh::shift_right_logical(value);
-                self.write_prefix_target(target, result);
-                self.apply_prefixed_rotate_shift_flags(result, carry);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::BIT(bit, target) => {
-                let value = self.read_prefix_target(target);
-                let result = value & (1 << bit);
-                self.registers.f.zero = result == 0;
-                self.registers.f.subtract = false;
-                self.registers.f.half_carry = true;
-                self.prefixed_result_for_target(&target, 12)
-            }
-            Instruction::RES(bit, target) => {
-                let value = self.read_prefix_target(target);
-                let result = value & !(1 << bit);
-                self.write_prefix_target(target, result);
-                self.prefixed_result_for_target(&target, 16)
-            }
-            Instruction::SET(bit, target) => {
-                let value = self.read_prefix_target(target);
-                let result = value | (1 << bit);
-                self.write_prefix_target(target, result);
-                self.prefixed_result_for_target(&target, 16)
-            }
+            Instruction::RLC(_)
+            | Instruction::RRC(_)
+            | Instruction::RL(_)
+            | Instruction::RR(_)
+            | Instruction::SLA(_)
+            | Instruction::SRA(_)
+            | Instruction::SWAP(_)
+            | Instruction::SRL(_) => self.execute_prefixed_rotate_shift(instruction),
+            Instruction::BIT(bit, target) => self.execute_prefixed_bit(bit, target),
+            Instruction::RES(bit, target) => self.execute_prefixed_res_set(bit, target, false),
+            Instruction::SET(bit, target) => self.execute_prefixed_res_set(bit, target, true),
             _ => unreachable!("execute_prefixed_instruction called with non-prefixed instruction"),
         }
+    }
+
+    fn execute_prefixed_rotate_shift(&mut self, instruction: Instruction) -> (u16, u16) {
+        enum PrefixedRotateShiftOp {
+            Rlc,
+            Rrc,
+            Rl,
+            Rr,
+            Sla,
+            Sra,
+            Swap,
+            Srl,
+        }
+
+        let (target, op) = match instruction {
+            Instruction::RLC(target) => (target, PrefixedRotateShiftOp::Rlc),
+            Instruction::RRC(target) => (target, PrefixedRotateShiftOp::Rrc),
+            Instruction::RL(target) => (target, PrefixedRotateShiftOp::Rl),
+            Instruction::RR(target) => (target, PrefixedRotateShiftOp::Rr),
+            Instruction::SLA(target) => (target, PrefixedRotateShiftOp::Sla),
+            Instruction::SRA(target) => (target, PrefixedRotateShiftOp::Sra),
+            Instruction::SWAP(target) => (target, PrefixedRotateShiftOp::Swap),
+            Instruction::SRL(target) => (target, PrefixedRotateShiftOp::Srl),
+            _ => unreachable!("execute_prefixed_rotate_shift called with non-rotate/shift instruction"),
+        };
+
+        let value = self.read_prefix_target(target);
+        let (result, carry) = match op {
+            PrefixedRotateShiftOp::Rlc => fh::rotate_left_circular(value),
+            PrefixedRotateShiftOp::Rrc => fh::rotate_right_circular(value),
+            PrefixedRotateShiftOp::Rl => fh::rotate_left_through_carry(value, self.registers.f.carry),
+            PrefixedRotateShiftOp::Rr => {
+                fh::rotate_right_through_carry(value, self.registers.f.carry)
+            }
+            PrefixedRotateShiftOp::Sla => fh::shift_left_arithmetic(value),
+            PrefixedRotateShiftOp::Sra => fh::shift_right_arithmetic(value),
+            PrefixedRotateShiftOp::Swap => (fh::swap_nibbles(value), false),
+            PrefixedRotateShiftOp::Srl => fh::shift_right_logical(value),
+        };
+
+        self.write_prefix_target(target, result);
+        self.apply_prefixed_rotate_shift_flags(result, carry);
+        self.prefixed_result_for_target(&target, 16)
+    }
+
+    fn execute_prefixed_bit(&mut self, bit: u8, target: PrefixTarget) -> (u16, u16) {
+        let value = self.read_prefix_target(target);
+        let result = value & (1 << bit);
+        self.registers.f.zero = result == 0;
+        self.registers.f.subtract = false;
+        self.registers.f.half_carry = true;
+        self.prefixed_result_for_target(&target, 12)
+    }
+
+    fn execute_prefixed_res_set(
+        &mut self,
+        bit: u8,
+        target: PrefixTarget,
+        set: bool,
+    ) -> (u16, u16) {
+        let value = self.read_prefix_target(target);
+        let result = if set { value | (1 << bit) } else { value & !(1 << bit) };
+        self.write_prefix_target(target, result);
+        self.prefixed_result_for_target(&target, 16)
     }
 
 }
