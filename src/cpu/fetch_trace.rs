@@ -37,9 +37,9 @@ impl FetchTraceOps for CPU {
         }
     }
 
-    fn trace_instruction(&self, prefixed: bool, opcode_byte: u8, instruction: &Instruction) {
+    fn trace_instruction(&self, prefixed: bool, opcode_byte: u8, _instruction: &Instruction) {
         // Build a readable opcode string (e.g. "0x3E" or "0xCB37")
-        let opcode_str = if prefixed {
+        let _opcode_str = if prefixed {
             format!("0xCB{:02X}", opcode_byte)
         } else {
             format!("0x{:02X}", opcode_byte)
