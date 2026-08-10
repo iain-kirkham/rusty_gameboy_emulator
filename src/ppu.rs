@@ -82,6 +82,7 @@ impl GPU {
         while self.dot_clock >= 456 {
             self.dot_clock -= 456;
             self.ly = (self.ly + 1) % 154;
+            self.update_coincidence_flag();
 
             if self.ly >= 144 {
                 // Mode 1 (V-Blank)
@@ -98,6 +99,15 @@ impl GPU {
                 } else {
                     0x00
                 };
+        }
+    }
+
+    /// Update STAT bit 2 (coincidence flag) to reflect whether LY == LYC.
+    fn update_coincidence_flag(&mut self) {
+        if self.ly == self.lyc {
+            self.stat |= 0x04;
+        } else {
+            self.stat &= !0x04;
         }
     }
 
@@ -200,15 +210,35 @@ impl GPU {
     /// * `value` - The value to write
     pub fn write_register(&mut self, addr: u16, value: u8) {
         match addr {
-            LCDC_ADDR => self.lcdc = value,
-            STAT_ADDR => self.stat = value,
+            LCDC_ADDR => {
+                let was_enabled = self.lcdc & 0x80 != 0;
+                let is_enabled = value & 0x80 != 0;
+                self.lcdc = value;
+
+                if was_enabled && !is_enabled {
+                    // Disabling the LCD resets LY, the internal dot clock, and
+                    // the STAT mode bits to Mode 0.
+                    self.ly = 0;
+                    self.dot_clock = 0;
+                    self.stat &= 0xFC;
+                    self.update_coincidence_flag();
+                } else if !was_enabled && is_enabled {
+                    // Re-enabling the LCD restarts scanning from line 0.
+                    self.update_coincidence_flag();
+                }
+            }
+            STAT_ADDR => self.stat = (value & 0x78) | (self.stat & 0x87),
             SCY_ADDR => self.scy = value,
             SCX_ADDR => self.scx = value,
             LY_ADDR => {
                 // LY is read-only in hardware; writes reset it to 0.
                 self.ly = 0;
+                self.update_coincidence_flag();
             }
-            LYC_ADDR => self.lyc = value,
+            LYC_ADDR => {
+                self.lyc = value;
+                self.update_coincidence_flag();
+            }
             DMA_ADDR => self.dma = value,
             BGP_ADDR => self.bgp = value,
             OBP0_ADDR => self.obp0 = value,
@@ -217,5 +247,123 @@ impl GPU {
             WX_ADDR => self.wx = value,
             _ => {}
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stat_write_preserves_mode_bits() {
+        let mut gpu = GPU::new();
+        // Advance dot_clock past 80 to transition into Mode 3 (0b11)
+        gpu.tick(100);
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x03, 0x03);
+
+        // Attempt to overwrite STAT with all 1s
+        gpu.write_register(STAT_ADDR, 0xFF);
+
+        // Mode bits (0-1) must remain Mode 3 (0b11)
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x03, 0x03);
+    }
+
+    #[test]
+    fn stat_write_preserves_coincidence_bit() {
+        let mut gpu = GPU::new();
+        // Manually set bit 2 on internal stat to simulate a match
+        gpu.stat |= 0x04;
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x04);
+
+        // Attempt to overwrite STAT with 0x00
+        gpu.write_register(STAT_ADDR, 0x00);
+
+        // Bit 2 must remain set to 1
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x04);
+    }
+
+    #[test]
+    fn stat_write_updates_interrupt_enable_bits() {
+        let mut gpu = GPU::new();
+        // Write interrupt enables (bits 3-6)
+        gpu.write_register(STAT_ADDR, 0b0111_1000);
+
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x78, 0b0111_1000);
+    }
+
+    #[test]
+    fn coincidence_flag_sets_when_ly_reaches_lyc() {
+        let mut gpu = GPU::new();
+        gpu.write_register(LYC_ADDR, 0x10);
+
+        // Tick forward by 16 scanlines (456 cycles * 16 = 7296 cycles)
+        gpu.tick(456 * 16);
+
+        assert_eq!(gpu.read_register(LY_ADDR), 0x10);
+        // Bit 2 (0x04) of STAT must be 1
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x04);
+    }
+
+    #[test]
+    fn coincidence_flag_clears_on_non_matching_line() {
+        let mut gpu = GPU::new();
+        gpu.write_register(LYC_ADDR, 0x10);
+
+        // Tick forward by 15 scanlines (LY = 0x0F)
+        gpu.tick(456 * 15);
+
+        assert_eq!(gpu.read_register(LY_ADDR), 0x0F);
+        // Bit 2 (0x04) of STAT must be 0
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x00);
+    }
+
+    #[test]
+    fn coincidence_flag_updates_immediately_on_lyc_write() {
+        let mut gpu = GPU::new();
+        // Tick to line 20
+        gpu.tick(456 * 20);
+
+        assert_eq!(gpu.read_register(LY_ADDR), 20);
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x00);
+
+        // Write matching value directly to LYC
+        gpu.write_register(LYC_ADDR, 20);
+
+        // Bit 2 must update immediately without needing to tick
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x04);
+    }
+
+    #[test]
+    fn coincidence_flag_clears_on_lyc_write_that_breaks_match() {
+        let mut gpu = GPU::new();
+        // Default: LY = 0, LYC = 0. Manually set coincidence for setup
+        gpu.stat |= 0x04;
+
+        // Write a non-matching value to LYC
+        gpu.write_register(LYC_ADDR, 0x50);
+
+        // Bit 2 must clear immediately
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x00);
+    }
+
+    #[test]
+    fn coincidence_reevaluated_after_lcd_reset() {
+        let mut gpu = GPU::new();
+
+        // Advance to line 10 so LY (10) != LYC (0), clearing coincidence (bit 2 = 0)
+        gpu.tick(456 * 10);
+        assert_eq!(gpu.read_register(LY_ADDR), 10);
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x00);
+
+        // Disable LCD (LCDC bit 7 -> 0)
+        gpu.write_register(LCDC_ADDR, 0x11); // 0x91 & !0x80 = 0x11
+        assert_eq!(gpu.read_register(LY_ADDR), 0);
+
+        // Re-enable LCD (LCDC bit 7 -> 1)
+        gpu.write_register(LCDC_ADDR, 0x91);
+
+        // LY is reset to 0, matching default LYC (0) -> coincidence bit 2 must be 1
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x04);
     }
 }
