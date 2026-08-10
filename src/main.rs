@@ -100,9 +100,12 @@ fn run_cpu_test_roms(test_roms: &[String]) {
         let mut cpu = CPU::new(rom_data);
         let mut cycle_count: u64 = 0;
         const MAX_CYCLES: u64 = 900_000_000; // 10 million T-states should be enough
+        let mut serial_output = String::new();
+        let mut result_seen = false;
 
-        // Run the emulation until max cycles or until CPU halts
-        while cycle_count < MAX_CYCLES {
+        // Run the emulation until max cycles, until CPU halts, or until the
+        // test ROM reports a Passed/Failed result over serial.
+        while cycle_count < MAX_CYCLES && !result_seen {
 
             let t_cycles = cpu.step() as usize;
 
@@ -131,7 +134,12 @@ fn run_cpu_test_roms(test_roms: &[String]) {
                 let output = cpu.bus.get_serial_output();
                 print!("{}", output);
                 io::stdout().flush().unwrap();
+                serial_output.push_str(&output);
                 cpu.bus.clear_serial_output();
+
+                if serial_output.contains("Passed") || serial_output.contains("Failed") {
+                    result_seen = true;
+                }
             }
 
             // Print progress every million cycles
