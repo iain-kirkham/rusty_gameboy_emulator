@@ -3,19 +3,9 @@
 //! This module orchestrates the emulation loop, loading ROMs and running CPU cycles
 //! with per-cycle hardware ticking (timer, GPU, etc.).
 
-mod cartridge_header;
-mod cpu;
-mod display;
-mod flag_helpers;
-mod instructions;
-mod interrupts;
-mod memory_bus;
-mod ppu;
-mod register;
-mod timer;
-
-use crate::cartridge_header::CartridgeHeader;
-use crate::cpu::{CpuTraceState, CPU};
+use rusty_gameboy_emulator::cartridge_header::CartridgeHeader;
+use rusty_gameboy_emulator::cpu::{CpuTraceState, CPU};
+use rusty_gameboy_emulator::display;
 use std::fs;
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
@@ -143,7 +133,7 @@ fn run_cpu_test_roms(test_roms: &[String]) {
             }
 
             // Print progress every million cycles
-            if cycle_count % 1_000_000 == 0 {
+            if cycle_count.is_multiple_of(1_000_000) {
                 eprint!("\r Cycles: {}M...", cycle_count / 1_000_000);
                 io::stderr().flush().unwrap();
             }

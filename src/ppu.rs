@@ -35,7 +35,7 @@ fn empty_tile() -> Tile {
     [[TilePixelValue::Zero; 8]; 8]
 }
 
-pub(crate) struct GPU {
+pub struct GPU {
     vram: [u8; VRAM_SIZE],
     tile_set: [Tile; 384],
     // LCD I/O Registers

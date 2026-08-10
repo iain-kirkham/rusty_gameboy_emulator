@@ -37,42 +37,7 @@ impl FetchTraceOps for CPU {
         }
     }
 
-    fn trace_instruction(&self, prefixed: bool, opcode_byte: u8, _instruction: &Instruction) {
-        // Build a readable opcode string (e.g. "0x3E" or "0xCB37")
-        let _opcode_str = if prefixed {
-            format!("0xCB{:02X}", opcode_byte)
-        } else {
-            format!("0x{:02X}", opcode_byte)
-        };
-
-        // Print a compact CPU state for debugging: PC, opcode, decoded instruction,
-        // registers A,B,C,D,E,H,L, SP, HL and flags (raw F and booleans).
-//         if self.registers.pc < 0x0206 || self.registers.pc > 0x020D {
-//             println!(
-//                 "PC={:#06X} OPCODE={} INST={:?} \
-// A={:#04X} F={:02X} Z={} N={} H={} C={} \
-// B={:#04X} C={:#04X} D={:#04X} E={:#04X} H={:#04X} L={:#04X} \
-// SP={:#06X} HL={:#06X}",
-//                 self.registers.pc,
-//                 opcode_str,
-//                 instruction,
-//                 self.registers.a,
-//                 self.registers.f.to_byte(),
-//                 self.registers.f.zero,
-//                 self.registers.f.subtract,
-//                 self.registers.f.half_carry,
-//                 self.registers.f.carry,
-//                 self.registers.b,
-//                 self.registers.c,
-//                 self.registers.d,
-//                 self.registers.e,
-//                 self.registers.h,
-//                 self.registers.l,
-//                 self.registers.sp,
-//                 self.registers.get_hl()
-//             );
-//         }
-    }
+    fn trace_instruction(&self, _prefixed: bool, _opcode_byte: u8, _instruction: &Instruction) {}
 
     fn read_next_byte(&self) -> u8 {
         self.bus.read_byte(self.registers.pc.wrapping_add(1))
