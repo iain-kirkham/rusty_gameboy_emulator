@@ -166,13 +166,9 @@ impl InterruptController {
         }
 
         // Check interrupts in priority order (lowest bit = highest priority)
-        for interrupt in Interrupt::ALL {
-            if (pending & interrupt.bit_mask()) != 0 {
-                return Some(interrupt);
-            }
-        }
-
-        None
+        Interrupt::ALL
+            .into_iter()
+            .find(|interrupt| (pending & interrupt.bit_mask()) != 0)
     }
 
     /// Service an interrupt: clear its IF bit and return the handler address.

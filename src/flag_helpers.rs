@@ -90,13 +90,13 @@ pub fn add_sp_signed(sp: u16, offset: i8) -> u16 {
 /// half_carry_add_sp: H flag (carry from bit 3)
 pub fn half_carry_add_sp(sp: u16, offset: i8) -> bool {
     let off_u8 = offset as u8;
-    (((sp & 0x0F) as u16) + ((off_u8 as u16) & 0x0F)) > 0x0F
+    ((sp & 0x0F) + ((off_u8 as u16) & 0x0F)) > 0x0F
 }
 
 /// carry_add_sp: C flag (carry from bit 7, i.e. low byte overflow)
 pub fn carry_add_sp(sp: u16, offset: i8) -> bool {
     let off_u8 = offset as u8;
-    (((sp & 0xFF) as u16) + (off_u8 as u16)) > 0xFF
+    ((sp & 0xFF) + (off_u8 as u16)) > 0xFF
 }
 
 /// Mask the F register to ensure lower 4 bits are zero (hardware invariant).
