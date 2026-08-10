@@ -19,7 +19,7 @@ pub struct FlagsRegister {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Register8 {
+pub enum Register8 {
     A,
     B,
     C,
@@ -30,7 +30,7 @@ pub(crate) enum Register8 {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Register16 {
+pub enum Register16 {
     BC,
     DE,
     HL,
