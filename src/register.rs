@@ -19,7 +19,7 @@ pub struct FlagsRegister {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Register8 {
+pub enum Register8 {
     A,
     B,
     C,
@@ -30,7 +30,7 @@ pub(crate) enum Register8 {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Register16 {
+pub enum Register16 {
     BC,
     DE,
     HL,
@@ -106,7 +106,15 @@ impl Registers {
             pc: 0x100,
         }
     }
+}
 
+impl Default for Registers {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Registers {
     // Combined 16-bit register pairs getters and setters
     /// Gets the 16-bit AF register pair.
     /// The A register forms the high byte, and the F (Flags) register forms the low byte.

@@ -283,7 +283,7 @@ fn format_bytes(bytes: usize) -> String {
     const MIB: usize = 1024 * 1024;
 
     if bytes >= MIB {
-        if bytes % MIB == 0 {
+        if bytes.is_multiple_of(MIB) {
             format!("{} MiB", bytes / MIB)
         } else {
             format!("{:.2} MiB", bytes as f64 / MIB as f64)

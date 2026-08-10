@@ -28,6 +28,12 @@ pub struct Timer {
     overflow_delay: Option<u8>, // pending reload delay after overflow
 }
 
+impl Default for Timer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Timer {
     pub fn new() -> Self {
         Timer {
