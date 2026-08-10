@@ -5,6 +5,7 @@
 
 mod cartridge_header;
 mod cpu;
+mod display;
 mod flag_helpers;
 mod instructions;
 mod interrupts;
@@ -40,9 +41,31 @@ fn write_doctor_log_line(trace: &CpuTraceState, writer: &mut BufWriter<fs::File>
     );
 }
 
-fn main() {
-    let test_roms = vec!["blargg/cpu_instrs/individual/11-op a,(hl).gb"];
+const DEFAULT_TEST_ROM: &str = "blargg/cpu_instrs/individual/11-op a,(hl).gb";
 
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    if args.iter().any(|a| a == "--display") {
+        // Basic minifb window scaffold - displays a static test pattern at
+        // GB screen resolution. Not yet wired to real PPU/CPU output.
+        display::run_test_screen();
+        return;
+    }
+
+    // Headless mode (default): run CPU test ROMs with no window, printing
+    // serial output and writing a Game Boy Doctor-format trace log.
+    let rom_paths: Vec<String> = args.into_iter().filter(|a| !a.starts_with("--")).collect();
+    let rom_paths = if rom_paths.is_empty() {
+        vec![DEFAULT_TEST_ROM.to_string()]
+    } else {
+        rom_paths
+    };
+
+    run_cpu_test_roms(&rom_paths);
+}
+
+fn run_cpu_test_roms(test_roms: &[String]) {
     for rom_path in test_roms {
         println!("==========================================");
         println!("Running test: {}", rom_path);
