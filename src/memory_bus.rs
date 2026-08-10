@@ -107,7 +107,7 @@ impl MemoryBus {
             OAM_START..=OAM_END => self.memory[address],
             SERIAL_TRANSFER_DATA | SERIAL_TRANSFER_CONTROL => self.memory[address],
             // Timer registers (0xFF04-0xFF07) are handled by the timer module
-            0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => self.timer.read(address as u16),
+            0xFF04..=0xFF07 => self.timer.read(address as u16),
             // LCD registers (0xFF40-0xFF4B) are handled by the PPU
             0xFF40..=0xFF4B => self.gpu.read_register(address as u16),
             // Interrupt Flag register (0xFF0F)
@@ -151,7 +151,7 @@ impl MemoryBus {
                 }
             }
             // Timer registers (0xFF04-0xFF07) are handled by the timer module
-            0xFF04 | 0xFF05 | 0xFF06 | 0xFF07 => {
+            0xFF04..=0xFF07 => {
                 self.timer.write(address as u16, value);
             }
             // DMA (OAM DMA) register - immediate 160-byte copy
