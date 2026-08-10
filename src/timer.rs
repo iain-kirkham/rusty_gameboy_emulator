@@ -145,10 +145,13 @@ impl Timer {
     }
 
     fn write_tima(&mut self, value: u8) {
-        self.tima = value;
-        if self.overflow_delay.is_some() {
-            self.overflow_delay = None;
+        // On the exact cycle the delayed reload fires, the reload wins and
+        // this write is ignored (matches hardware / Mooneye's tima_write_reloading test).
+        if self.overflow_delay == Some(1) {
+            return;
         }
+        self.tima = value;
+        self.overflow_delay = None;
     }
 
     fn write_tma(&mut self, value: u8) {
@@ -241,5 +244,61 @@ mod tests {
         }
 
         assert_eq!(timer.read(TIMA_REGISTER), 0x25);
+    }
+
+    #[test]
+    fn test_tima_write_ignored_on_exact_reload_cycle() {
+        let mut timer = Timer::new();
+        timer.write(TAC_REGISTER, 0b101);
+        timer.write(TMA_REGISTER, 0x42);
+        timer.write(TIMA_REGISTER, 0xFF);
+        timer.div = 7;
+        timer.prev_timer_bit = false;
+
+        // Advance through the overflow tick and the delay until the very
+        // next tick is the one that performs the TMA -> TIMA reload.
+        for _ in 0..12 {
+            timer.tick();
+        }
+        assert_eq!(timer.overflow_delay, Some(1));
+
+        // Written on the exact reload cycle: hardware ignores this write,
+        // the reload still wins (Mooneye's tima_write_reloading test).
+        timer.write(TIMA_REGISTER, 0x99);
+
+        let fired = timer.tick();
+        assert!(fired);
+        assert_eq!(timer.read(TIMA_REGISTER), 0x42);
+    }
+
+    #[test]
+    fn test_div_write_glitch_increments_tima() {
+        let mut timer = Timer::new();
+        timer.write(TAC_REGISTER, 0b100); // enabled, freq 00 -> DIV bit 9
+        timer.div = 0x0200; // bit 9 currently high
+        timer.prev_timer_bit = true;
+        timer.tima = 0x10;
+
+        // Writing DIV resets it to 0; the selected bit falls 1 -> 0,
+        // which glitches a spurious TIMA increment on real hardware.
+        timer.write(DIV_REGISTER, 0);
+
+        assert_eq!(timer.read(DIV_REGISTER), 0);
+        assert_eq!(timer.tima, 0x11);
+    }
+
+    #[test]
+    fn test_tac_frequency_switch_glitch_increments_tima() {
+        let mut timer = Timer::new();
+        timer.write(TAC_REGISTER, 0b100); // enabled, freq 00 -> DIV bit 9
+        timer.div = 0x0200; // bit 9 high, bit 7 low
+        timer.prev_timer_bit = true;
+        timer.tima = 0x05;
+
+        // Switching to a frequency whose selected bit reads low while
+        // still enabled glitches a falling edge, incrementing TIMA once.
+        timer.write(TAC_REGISTER, 0b111); // freq 11 -> DIV bit 7
+
+        assert_eq!(timer.tima, 0x06);
     }
 }
