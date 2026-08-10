@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build output
+        uses: Swatinem/rust-cache@v2
+
+      - name: Fetch Blargg test ROMs
+        run: |
+          git clone --depth 1 https://github.com/retrio/gb-test-roms.git /tmp/gb-test-roms
+          mkdir -p blargg
+          cp -r /tmp/gb-test-roms/cpu_instrs blargg/cpu_instrs
+
+      - name: cargo test
+        run: cargo test --verbose
+
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
