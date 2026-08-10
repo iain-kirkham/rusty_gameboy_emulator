@@ -22,7 +22,7 @@ pub(crate) use load::LoadOps;
 pub(crate) use prefix::PrefixOps;
 pub(crate) use stack_interrupts::StackInterruptOps;
 
-pub(crate) struct CPU {
+pub struct CPU {
     pub registers: register::Registers,
     pub bus: MemoryBus,
     is_halted: bool,
@@ -33,7 +33,7 @@ pub(crate) struct CPU {
     last_trace: Option<CpuTraceState>,
 }
 
-pub(crate) struct CpuTraceState {
+pub struct CpuTraceState {
     pub a: u8,
     pub f: u8,
     pub b: u8,
@@ -49,7 +49,7 @@ pub(crate) struct CpuTraceState {
 
 impl CPU {
     /// Create a new CPU with the initial register state and a ROM loaded into the bus.
-    pub(crate) fn new(rom_data: Vec<u8>) -> CPU {
+    pub fn new(rom_data: Vec<u8>) -> CPU {
         let bus = MemoryBus::new(rom_data);
         CPU {
             registers: Registers::new(),
@@ -76,7 +76,7 @@ impl CPU {
     ///
     /// # Unknown Instructions
     /// Panics on unknown opcodes to make missing implementations obvious during development.
-    pub(crate) fn step(&mut self) -> u16 {
+    pub fn step(&mut self) -> u16 {
         self.last_step_executed_opcode = false;
         self.last_trace = None;
         if let Some(cycles) = self.process_pre_instruction_state() {
@@ -176,11 +176,11 @@ impl CPU {
     }
 
     /// Returns whether the last executed step was an actual opcode (as opposed to a NOP during HALT).
-    pub(crate) fn last_step_executed_opcode(&self) -> bool {
+    pub fn last_step_executed_opcode(&self) -> bool {
         self.last_step_executed_opcode
     }
 
-    pub(crate) fn take_last_trace(&mut self) -> Option<CpuTraceState> {
+    pub fn take_last_trace(&mut self) -> Option<CpuTraceState> {
         self.last_trace.take()
     }
 

@@ -66,7 +66,7 @@ fn test_pattern() -> Vec<u32> {
 }
 
 /// Open a window and display a static test pattern until the user closes it.
-pub(crate) fn run_test_screen() {
+pub fn run_test_screen() {
     let mut display = Display::new("Rusty Game Boy Emulator - Test Screen");
     let frame = test_pattern();
 
