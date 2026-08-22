@@ -111,8 +111,9 @@ fn run_cpu_test_roms(test_roms: &[String]) {
                 // requested via the interrupt controller when TIMA overflows.
                 cpu.bus.tick_timer();
 
-                // Advance PPU timing one T-cycle at a time.
-                cpu.bus.gpu.tick(1);
+                // Advance PPU timing one T-cycle at a time. V-Blank/LCD STAT
+                // interrupts are requested automatically when triggered.
+                cpu.bus.tick_ppu(1);
 
                 // TODO: Tick other per-T-cycle systems here (GPU/PPU, DMA timing, etc.)
             }

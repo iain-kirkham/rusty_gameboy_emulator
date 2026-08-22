@@ -44,7 +44,7 @@ pub fn run_headless(rom_data: Vec<u8>, max_t_cycles: u64, stop_markers: &[&str])
 
         for _ in 0..t_cycles {
             cpu.bus.tick_timer();
-            cpu.bus.gpu.tick(1);
+            cpu.bus.tick_ppu(1);
         }
 
         t_cycles_total = t_cycles_total.wrapping_add(t_cycles as u64);
