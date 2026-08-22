@@ -214,6 +214,20 @@ impl MemoryBus {
         }
     }
 
+    /// Tick the PPU by the given number of T-cycles and request V-Blank/LCD
+    /// STAT interrupts if the tick crossed either interrupt's trigger edge.
+    ///
+    /// This must be called once per T-cycle in the emulation loop.
+    pub fn tick_ppu(&mut self, cycles: u16) {
+        let events = self.gpu.tick(cycles);
+        if events.vblank {
+            self.interrupts.request_interrupt(Interrupt::VBlank);
+        }
+        if events.stat {
+            self.interrupts.request_interrupt(Interrupt::LcdStat);
+        }
+    }
+
     /// Request an interrupt.
     #[allow(dead_code)]
     pub fn request_interrupt(&mut self, interrupt: Interrupt) {

@@ -35,6 +35,25 @@ fn empty_tile() -> Tile {
     [[TilePixelValue::Zero; 8]; 8]
 }
 
+pub const SCREEN_WIDTH: usize = 160;
+pub const SCREEN_HEIGHT: usize = 144;
+const FRAMEBUFFER_SIZE: usize = SCREEN_WIDTH * SCREEN_HEIGHT;
+
+/// Interrupt-relevant events produced by a single `GPU::tick` call.
+///
+/// `#[must_use]` because dropping these silently is exactly the bug this type
+/// exists to prevent: a caller ticking the PPU without wiring the resulting
+/// interrupts up to the interrupt controller.
+#[must_use]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct PpuEvents {
+    /// LY transitioned from 143 to 144 (entered V-Blank) this tick.
+    pub vblank: bool,
+    /// The STAT interrupt line (OR of the four enabled STAT conditions)
+    /// transitioned from low to high this tick.
+    pub stat: bool,
+}
+
 pub struct GPU {
     vram: [u8; VRAM_SIZE],
     tile_set: [Tile; 384],
@@ -52,6 +71,13 @@ pub struct GPU {
     wy: u8,   // 0xFF4A - Window Y Position
     wx: u8,   // 0xFF4B - Window X Position
     dot_clock: u32,
+    /// State of the STAT interrupt line as of the last tick, used to detect
+    /// the rising edge that actually requests the LCD STAT interrupt.
+    stat_interrupt_line: bool,
+    /// Shade-index (0-3) framebuffer. Not yet populated by real BG/window/
+    /// sprite pixel composition — scanline rendering is separate follow-up
+    /// work. Exists now so callers have a stable seam to read from.
+    framebuffer: [u8; FRAMEBUFFER_SIZE],
 }
 
 impl GPU {
@@ -72,21 +98,29 @@ impl GPU {
             wy: 0,
             wx: 0,
             dot_clock: 0,
+            stat_interrupt_line: false,
+            framebuffer: [0; FRAMEBUFFER_SIZE],
         }
     }
 
-    /// Advance PPU timing by a batch of CPU cycles.
-    pub fn tick(&mut self, cycles: u16) {
+    /// Advance PPU timing by a batch of CPU cycles, returning any interrupt
+    /// events (V-Blank, STAT) that occurred during this tick.
+    pub fn tick(&mut self, cycles: u16) -> PpuEvents {
+        let mut vblank = false;
         self.dot_clock += cycles as u32;
 
         while self.dot_clock >= 456 {
             self.dot_clock -= 456;
+            let was_below_vblank = self.ly < 144;
             self.ly = (self.ly + 1) % 154;
             self.update_coincidence_flag();
 
             if self.ly >= 144 {
                 // Mode 1 (V-Blank)
                 self.stat = (self.stat & 0xFC) | 0x01;
+                if was_below_vblank {
+                    vblank = true;
+                }
             }
         }
 
@@ -100,6 +134,10 @@ impl GPU {
                     0x00
                 };
         }
+
+        let stat = self.update_stat_interrupt_line();
+
+        PpuEvents { vblank, stat }
     }
 
     /// Update STAT bit 2 (coincidence flag) to reflect whether LY == LYC.
@@ -109,6 +147,31 @@ impl GPU {
         } else {
             self.stat &= !0x04;
         }
+    }
+
+    /// Recompute the STAT interrupt line (the OR of the four enabled STAT
+    /// conditions: mode 0, mode 1, mode 2, LYC==LY) and report whether it
+    /// just rose from low to high — that rising edge is what the real
+    /// hardware's LCD STAT interrupt fires on.
+    fn update_stat_interrupt_line(&mut self) -> bool {
+        let mode = self.stat & 0x03;
+        let mode0_enabled = self.stat & 0x08 != 0 && mode == 0;
+        let mode1_enabled = self.stat & 0x10 != 0 && mode == 1;
+        let mode2_enabled = self.stat & 0x20 != 0 && mode == 2;
+        let lyc_enabled = self.stat & 0x40 != 0 && self.stat & 0x04 != 0;
+
+        let line = mode0_enabled || mode1_enabled || mode2_enabled || lyc_enabled;
+        let rising_edge = line && !self.stat_interrupt_line;
+        self.stat_interrupt_line = line;
+        rising_edge
+    }
+
+    /// Read-only view of the current framebuffer: one shade index (0-3) per
+    /// pixel, row-major, `SCREEN_WIDTH` x `SCREEN_HEIGHT`. Not yet populated
+    /// by real rendering — scanline pixel composition is separate follow-up
+    /// work.
+    pub fn framebuffer(&self) -> &[u8; FRAMEBUFFER_SIZE] {
+        &self.framebuffer
     }
 
     pub fn read_vram(&self, address: usize) -> u8 {
@@ -222,6 +285,7 @@ impl GPU {
                     self.dot_clock = 0;
                     self.stat &= 0xFC;
                     self.update_coincidence_flag();
+                    self.stat_interrupt_line = false;
                 } else if !was_enabled && is_enabled {
                     // Re-enabling the LCD restarts scanning from line 0.
                     self.update_coincidence_flag();
@@ -255,11 +319,27 @@ impl GPU {
 mod tests {
     use super::*;
 
+    /// Tick `gpu` forward by `total_cycles` (which may exceed u16::MAX) in
+    /// 456-cycle chunks, returning the OR of all `PpuEvents` seen along the
+    /// way. Only used by tests that need to advance many scanlines at once.
+    fn tick_cycles(gpu: &mut GPU, total_cycles: u32) -> PpuEvents {
+        let mut remaining = total_cycles;
+        let mut events = PpuEvents::default();
+        while remaining > 0 {
+            let chunk = remaining.min(456);
+            let chunk_events = gpu.tick(chunk as u16);
+            events.vblank |= chunk_events.vblank;
+            events.stat |= chunk_events.stat;
+            remaining -= chunk;
+        }
+        events
+    }
+
     #[test]
     fn stat_write_preserves_mode_bits() {
         let mut gpu = GPU::new();
         // Advance dot_clock past 80 to transition into Mode 3 (0b11)
-        gpu.tick(100);
+        let _ = gpu.tick(100);
         assert_eq!(gpu.read_register(STAT_ADDR) & 0x03, 0x03);
 
         // Attempt to overwrite STAT with all 1s
@@ -298,11 +378,13 @@ mod tests {
         gpu.write_register(LYC_ADDR, 0x10);
 
         // Tick forward by 16 scanlines (456 cycles * 16 = 7296 cycles)
-        gpu.tick(456 * 16);
+        // LYC=LY interrupt is not enabled, so no STAT event should fire.
+        let events = gpu.tick(456 * 16);
 
         assert_eq!(gpu.read_register(LY_ADDR), 0x10);
         // Bit 2 (0x04) of STAT must be 1
         assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x04);
+        assert!(!events.stat);
     }
 
     #[test]
@@ -311,18 +393,19 @@ mod tests {
         gpu.write_register(LYC_ADDR, 0x10);
 
         // Tick forward by 15 scanlines (LY = 0x0F)
-        gpu.tick(456 * 15);
+        let events = gpu.tick(456 * 15);
 
         assert_eq!(gpu.read_register(LY_ADDR), 0x0F);
         // Bit 2 (0x04) of STAT must be 0
         assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x00);
+        assert!(!events.stat);
     }
 
     #[test]
     fn coincidence_flag_updates_immediately_on_lyc_write() {
         let mut gpu = GPU::new();
         // Tick to line 20
-        gpu.tick(456 * 20);
+        let _ = gpu.tick(456 * 20);
 
         assert_eq!(gpu.read_register(LY_ADDR), 20);
         assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x00);
@@ -352,7 +435,7 @@ mod tests {
         let mut gpu = GPU::new();
 
         // Advance to line 10 so LY (10) != LYC (0), clearing coincidence (bit 2 = 0)
-        gpu.tick(456 * 10);
+        let _ = gpu.tick(456 * 10);
         assert_eq!(gpu.read_register(LY_ADDR), 10);
         assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x00);
 
@@ -364,6 +447,93 @@ mod tests {
         gpu.write_register(LCDC_ADDR, 0x91);
 
         // LY is reset to 0, matching default LYC (0) -> coincidence bit 2 must be 1
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x04);
+    }
+
+    #[test]
+    fn vblank_fires_once_on_entering_line_144() {
+        let mut gpu = GPU::new();
+        // Advance to the last dot of line 143, still outside V-Blank.
+        let events = tick_cycles(&mut gpu, 456 * 144 - 1);
+        assert!(!events.vblank);
+        assert_eq!(gpu.read_register(LY_ADDR), 143);
+
+        // This tick crosses the 143->144 boundary.
+        let events = gpu.tick(1);
+        assert!(events.vblank);
+        assert_eq!(gpu.read_register(LY_ADDR), 144);
+
+        // Staying in V-Blank must not refire the event.
+        let events = gpu.tick(456);
+        assert!(!events.vblank);
+    }
+
+    #[test]
+    fn stat_interrupt_does_not_fire_when_disabled() {
+        let mut gpu = GPU::new();
+        // No STAT enable bits set. Crossing into V-Blank must not raise the event.
+        let events = tick_cycles(&mut gpu, 456 * 144);
+        assert!(!events.stat);
+    }
+
+    #[test]
+    fn stat_interrupt_fires_on_mode0_entry_when_enabled() {
+        let mut gpu = GPU::new();
+        gpu.write_register(STAT_ADDR, 0x08); // enable Mode 0 (H-Blank) STAT interrupt
+
+        // Still Mode 3 just before the Mode 0 boundary.
+        let events = gpu.tick(252);
+        assert!(!events.stat);
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x03, 0x03);
+
+        // Crossing into Mode 0 raises the event once.
+        let events = gpu.tick(1);
+        assert!(events.stat);
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x03, 0x00);
+
+        // Staying in Mode 0 must not refire.
+        let events = gpu.tick(1);
+        assert!(!events.stat);
+    }
+
+    #[test]
+    fn stat_interrupt_fires_on_mode1_entry_when_enabled() {
+        let mut gpu = GPU::new();
+        gpu.write_register(STAT_ADDR, 0x10); // enable Mode 1 (V-Blank) STAT interrupt
+
+        let events = tick_cycles(&mut gpu, 456 * 144);
+        assert!(events.stat);
+        assert_eq!(gpu.read_register(LY_ADDR), 144);
+    }
+
+    #[test]
+    fn stat_interrupt_fires_on_mode2_entry_when_enabled() {
+        let mut gpu = GPU::new();
+        gpu.write_register(STAT_ADDR, 0x20); // enable Mode 2 (OAM scan) STAT interrupt
+
+        // Still the tail of line 0's Mode 0 just before the next line starts.
+        let events = gpu.tick(455);
+        assert!(!events.stat);
+
+        // Crossing into line 1 re-enters Mode 2, raising the event.
+        let events = gpu.tick(1);
+        assert!(events.stat);
+        assert_eq!(gpu.read_register(STAT_ADDR) & 0x03, 0x02);
+    }
+
+    #[test]
+    fn stat_interrupt_fires_on_lyc_match_when_enabled() {
+        let mut gpu = GPU::new();
+        gpu.write_register(STAT_ADDR, 0x40); // enable LYC=LY STAT interrupt
+        gpu.write_register(LYC_ADDR, 5);
+
+        // Not yet at line 5.
+        let events = gpu.tick(456 * 5 - 1);
+        assert!(!events.stat);
+
+        // Crossing into line 5 makes LY == LYC, raising the event.
+        let events = gpu.tick(1);
+        assert!(events.stat);
         assert_eq!(gpu.read_register(STAT_ADDR) & 0x04, 0x04);
     }
 }
