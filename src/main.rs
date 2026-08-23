@@ -4,34 +4,55 @@
 //! with per-cycle hardware ticking (timer, GPU, etc.).
 
 use rusty_gameboy_emulator::cartridge_header::CartridgeHeader;
-use rusty_gameboy_emulator::cpu::{CpuTraceState, CPU};
+use rusty_gameboy_emulator::cpu::CpuTraceState;
 use rusty_gameboy_emulator::display;
+use rusty_gameboy_emulator::{run, RunObserver};
 use std::fs;
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
-fn write_doctor_log_line(trace: &CpuTraceState, writer: &mut BufWriter<fs::File>) {
-    let _ = writeln!(
-        writer,
-        "A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
-        trace.a,
-        trace.f,
-        trace.b,
-        trace.c,
-        trace.d,
-        trace.e,
-        trace.h,
-        trace.l,
-        trace.sp,
-        trace.pc,
-        trace.pcmem[0],
-        trace.pcmem[1],
-        trace.pcmem[2],
-        trace.pcmem[3]
-    );
+const DEFAULT_TEST_ROM: &str = "blargg/cpu_instrs/individual/11-op a,(hl).gb";
+
+/// Writes a Game Boy Doctor-format trace log and prints progress/serial
+/// output to the console, matching the CLI's expected console behavior.
+struct TestRunObserver {
+    log_writer: BufWriter<fs::File>,
 }
 
-const DEFAULT_TEST_ROM: &str = "blargg/cpu_instrs/individual/11-op a,(hl).gb";
+impl RunObserver for TestRunObserver {
+    fn on_trace(&mut self, trace: &CpuTraceState) {
+        let _ = writeln!(
+            self.log_writer,
+            "A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
+            trace.a,
+            trace.f,
+            trace.b,
+            trace.c,
+            trace.d,
+            trace.e,
+            trace.h,
+            trace.l,
+            trace.sp,
+            trace.pc,
+            trace.pcmem[0],
+            trace.pcmem[1],
+            trace.pcmem[2],
+            trace.pcmem[3]
+        );
+    }
+
+    fn on_serial_chunk(&mut self, chunk: &str) {
+        print!("{}", chunk);
+        io::stdout().flush().unwrap();
+    }
+
+    fn on_step(&mut self, cycle_count: u64) {
+        if cycle_count.is_multiple_of(1_000_000) {
+            eprint!("\r Cycles: {}M...", cycle_count / 1_000_000);
+            io::stderr().flush().unwrap();
+        }
+    }
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -85,69 +106,18 @@ fn run_cpu_test_roms(test_roms: &[String]) {
             .unwrap_or("doctor");
         let log_path = format!("doctor_{}.log", log_name);
         let log_file = fs::File::create(&log_path).expect("Failed to create doctor log file");
-        let mut log_writer = BufWriter::new(log_file);
+        let mut observer = TestRunObserver {
+            log_writer: BufWriter::new(log_file),
+        };
 
-        let mut cpu = CPU::new(rom_data);
-        let mut cycle_count: u64 = 0;
         const MAX_CYCLES: u64 = 900_000_000; // 10 million T-states should be enough
-        let mut serial_output = String::new();
-        let mut result_seen = false;
 
-        // Run the emulation until max cycles, until CPU halts, or until the
-        // test ROM reports a Passed/Failed result over serial.
-        while cycle_count < MAX_CYCLES && !result_seen {
+        // Run the emulation until max cycles, or until the test ROM reports
+        // a Passed/Failed result over serial.
+        let result = run(rom_data, MAX_CYCLES, &["Passed", "Failed"], &mut observer);
 
-            let t_cycles = cpu.step() as usize;
-
-            if cpu.last_step_executed_opcode() {
-                if let Some(trace) = cpu.take_last_trace() {
-                    write_doctor_log_line(&trace, &mut log_writer);
-                }
-            }
-
-            // Advance per-T-cycle hardware (Timer, GPU/PPU, DMA, etc.)
-            for _ in 0..t_cycles {
-                // Tick timer once per T-cycle. Timer interrupt is automatically
-                // requested via the interrupt controller when TIMA overflows.
-                cpu.bus.tick_timer();
-
-                // Advance PPU timing one T-cycle at a time. V-Blank/LCD STAT
-                // interrupts are requested automatically when triggered.
-                cpu.bus.tick_ppu(1);
-
-                // TODO: Tick other per-T-cycle systems here (GPU/PPU, DMA timing, etc.)
-            }
-
-            cycle_count = cycle_count.wrapping_add(t_cycles as u64);
-
-            // Check for serial output and print it immediately
-            if cpu.bus.has_serial_output() {
-                let output = cpu.bus.get_serial_output();
-                print!("{}", output);
-                io::stdout().flush().unwrap();
-                serial_output.push_str(&output);
-                cpu.bus.clear_serial_output();
-
-                if serial_output.contains("Passed") || serial_output.contains("Failed") {
-                    result_seen = true;
-                }
-            }
-
-            // Print progress every million cycles
-            if cycle_count.is_multiple_of(1_000_000) {
-                eprint!("\r Cycles: {}M...", cycle_count / 1_000_000);
-                io::stderr().flush().unwrap();
-            }
-        }
-
-        if cycle_count >= MAX_CYCLES {
+        if result.timed_out {
             println!("\n Reached maximum cycle count ({})", MAX_CYCLES);
-        }
-
-        // Print any remaining serial output
-        if cpu.bus.has_serial_output() {
-            let output = cpu.bus.get_serial_output();
-            print!("{}", output);
         }
 
         println!("\n==========================================\n");
