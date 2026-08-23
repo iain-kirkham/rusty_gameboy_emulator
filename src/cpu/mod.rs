@@ -22,13 +22,27 @@ pub(crate) use load::LoadOps;
 pub(crate) use prefix::PrefixOps;
 pub(crate) use stack_interrupts::StackInterruptOps;
 
+/// The CPU's HALT state. `Halted` and `HaltBugPending` are mutually
+/// exclusive by construction: `HALT`'s handling picks exactly one of them,
+/// never both (see the HALT bug invariant in CLAUDE.md).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum HaltState {
+    #[default]
+    Running,
+    /// CPU is halted, waiting for a pending interrupt to wake it.
+    Halted,
+    /// HALT was executed with IME disabled and an interrupt already
+    /// pending: the CPU keeps running, but PC must be decremented before
+    /// the next instruction executes so that instruction is fetched twice.
+    HaltBugPending,
+}
+
 pub struct CPU {
     pub registers: register::Registers,
     pub bus: MemoryBus,
-    is_halted: bool,
+    halt_state: HaltState,
     pub interrupts_enabled: bool,
     ei_pending: bool,
-    halt_bug: bool,
     last_step_executed_opcode: bool,
     last_trace: Option<CpuTraceState>,
 }
@@ -54,10 +68,9 @@ impl CPU {
         CPU {
             registers: Registers::new(),
             bus,
-            is_halted: false,
+            halt_state: HaltState::Running,
             interrupts_enabled: false,
             ei_pending: false,
-            halt_bug: false,
             last_step_executed_opcode: false,
             last_trace: None,
         }
@@ -70,7 +83,7 @@ impl CPU {
     /// Returns 0 cycles if the CPU is halted (HALT mode waiting for interrupt).
     ///
     /// # HALT Behavior
-    /// When a HALT instruction is encountered, the CPU sets `is_halted = true`.
+    /// When a HALT instruction is encountered, the CPU enters `HaltState::Halted`.
     /// The CPU remains halted until an interrupt becomes pending.
     /// Call `wake_from_halt()` when implementing interrupt handling.
     ///
@@ -124,7 +137,7 @@ impl CPU {
             return Some(cycles);
         }
 
-        if self.is_halted {
+        if self.halt_state == HaltState::Halted {
             // CPU is halted and no interrupt to service, consume 4 T-cycles
             return Some(4);
         }
@@ -134,10 +147,10 @@ impl CPU {
 
 
     fn apply_halt_bug_if_needed(&mut self) {
-        // HALT bug: When set, decrement PC before execution so operand reads
+        // HALT bug: When pending, decrement PC before execution so operand reads
         // happen at the wrong address (byte after HALT is read twice)
-        if self.halt_bug {
-            self.halt_bug = false;
+        if self.halt_state == HaltState::HaltBugPending {
+            self.halt_state = HaltState::Running;
             self.registers.pc = self.registers.pc.wrapping_sub(1);
         }
     }
