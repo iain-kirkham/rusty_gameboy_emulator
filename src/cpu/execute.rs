@@ -167,38 +167,11 @@ impl CPU {
         (result, half_carry, carry)
     }
 
-    fn apply_sp_plus_offset_flags(&mut self, half_carry: bool, carry: bool) {
-        self.registers.f.zero = false;
-        self.registers.f.subtract = false;
-        self.registers.f.half_carry = half_carry;
-        self.registers.f.carry = carry;
-    }
-
-    fn apply_accumulator_rotate_result(&mut self, result: u8, carry: bool) {
-        self.registers.a = result;
-        self.registers.f.zero = false;
-        self.registers.f.subtract = false;
-        self.registers.f.half_carry = false;
-        self.registers.f.carry = carry;
-    }
-
     fn prefixed_result_for_target(&self, target: &PrefixTarget, memory_cycles: u16) -> (u16, u16) {
         match target.to_register8() {
             Some(_) => self.instruction_result(2, 8),
             None => self.instruction_result(2, memory_cycles),
         }
-    }
-
-    fn apply_prefixed_rotate_shift_flags(&mut self, result: u8, carry: bool) {
-        self.registers.f.zero = result == 0;
-        self.registers.f.subtract = false;
-        self.registers.f.half_carry = false;
-        self.registers.f.carry = carry;
-    }
-
-    fn set_nh_flags(&mut self, subtract: bool, half_carry: bool) {
-        self.registers.f.subtract = subtract;
-        self.registers.f.half_carry = half_carry;
     }
 
     fn execute_inc_dec_instruction(&mut self, instruction: Instruction) -> (u16, u16) {
@@ -347,24 +320,28 @@ impl CPU {
         match instruction {
             Instruction::RLCA => {
                 let (result, carry) = fh::rotate_left_circular(self.registers.a);
-                self.apply_accumulator_rotate_result(result, carry);
+                self.registers.a = result;
+                self.registers.f.apply_rotate_accumulator(carry);
                 self.instruction_result(1, 4)
             }
             Instruction::RRCA => {
                 let (result, carry) = fh::rotate_right_circular(self.registers.a);
-                self.apply_accumulator_rotate_result(result, carry);
+                self.registers.a = result;
+                self.registers.f.apply_rotate_accumulator(carry);
                 self.instruction_result(1, 4)
             }
             Instruction::RLA => {
                 let (result, carry) =
                     fh::rotate_left_through_carry(self.registers.a, self.registers.f.carry);
-                self.apply_accumulator_rotate_result(result, carry);
+                self.registers.a = result;
+                self.registers.f.apply_rotate_accumulator(carry);
                 self.instruction_result(1, 4)
             }
             Instruction::RRA => {
                 let (result, carry) =
                     fh::rotate_right_through_carry(self.registers.a, self.registers.f.carry);
-                self.apply_accumulator_rotate_result(result, carry);
+                self.registers.a = result;
+                self.registers.f.apply_rotate_accumulator(carry);
                 self.instruction_result(1, 4)
             }
             Instruction::DAA => {
@@ -400,16 +377,16 @@ impl CPU {
             }
             Instruction::CPL => {
                 self.registers.a = !self.registers.a;
-                self.set_nh_flags(true, true);
+                self.registers.f.apply_nh(true, true);
                 self.instruction_result(1, 4)
             }
             Instruction::SCF => {
-                self.set_nh_flags(false, false);
+                self.registers.f.apply_nh(false, false);
                 self.registers.f.carry = true;
                 self.instruction_result(1, 4)
             }
             Instruction::CCF => {
-                self.set_nh_flags(false, false);
+                self.registers.f.apply_nh(false, false);
                 self.registers.f.carry = !self.registers.f.carry;
                 self.instruction_result(1, 4)
             }
@@ -436,7 +413,7 @@ impl CPU {
                 let sp = self.registers.sp;
                 let (result, half_carry, carry) = Self::compute_sp_plus_offset(sp, offset_signed);
 
-                self.apply_sp_plus_offset_flags(half_carry, carry);
+                self.registers.f.apply_sp_offset(half_carry, carry);
                 self.registers.sp = result;
                 self.instruction_result(2, 16)
             }
@@ -445,7 +422,7 @@ impl CPU {
                 let sp = self.registers.sp;
                 let (result, half_carry, carry) = Self::compute_sp_plus_offset(sp, offset_signed);
 
-                self.apply_sp_plus_offset_flags(half_carry, carry);
+                self.registers.f.apply_sp_offset(half_carry, carry);
                 self.registers.set_hl(result);
                 self.instruction_result(2, 12)
             }
@@ -509,7 +486,7 @@ impl CPU {
         };
 
         self.write_prefix_target(target, result);
-        self.apply_prefixed_rotate_shift_flags(result, carry);
+        self.registers.f.apply_rotate_shift(result, carry);
         self.prefixed_result_for_target(&target, 16)
     }
 
