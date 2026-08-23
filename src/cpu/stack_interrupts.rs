@@ -1,4 +1,5 @@
 use super::CPU;
+use super::HaltState;
 use crate::instructions::StackTarget;
 use crate::interrupts::INTERRUPT_CYCLES;
 
@@ -13,8 +14,12 @@ pub(crate) trait StackInterruptOps {
 
 impl StackInterruptOps for CPU {
     /// Wake the CPU from HALT state when an enabled interrupt becomes pending.
+    /// A no-op unless actually halted: `HaltBugPending` must survive until
+    /// `apply_halt_bug_if_needed` consumes it, and `Running` is already awake.
     fn wake_from_halt(&mut self) {
-        self.is_halted = false;
+        if self.halt_state == HaltState::Halted {
+            self.halt_state = HaltState::Running;
+        }
     }
 
     /// Handle pending interrupts if IME is enabled.

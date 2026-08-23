@@ -1,4 +1,5 @@
 use super::CPU;
+use super::HaltState;
 use super::{
     ArithmeticOps, ControlFlowOps, FetchTraceOps, LoadOps, PrefixOps, StackInterruptOps,
 };
@@ -69,14 +70,14 @@ impl CPU {
         match instruction {
             Instruction::NOP => self.instruction_result(1, 4),
             Instruction::STOP => {
-                self.is_halted = true;
+                self.halt_state = HaltState::Halted;
                 self.instruction_result(2, 4)
             }
             Instruction::HALT => {
                 if !self.interrupts_enabled && self.bus.any_interrupt_pending() {
-                    self.halt_bug = true;
+                    self.halt_state = HaltState::HaltBugPending;
                 } else {
-                    self.is_halted = true;
+                    self.halt_state = HaltState::Halted;
                 }
                 self.instruction_result(1, 4)
             }
