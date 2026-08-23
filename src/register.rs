@@ -65,6 +65,53 @@ impl FlagsRegister {
             carry: byte & 0x10 != 0,
         }
     }
+
+    /// Flags for ADD/ADC/SUB/SBC: sets all four flags.
+    pub fn apply_arithmetic(&mut self, result: u8, subtract: bool, carry: bool, half_carry: bool) {
+        self.zero = result == 0;
+        self.subtract = subtract;
+        self.half_carry = half_carry;
+        self.carry = carry;
+    }
+
+    /// Flags for AND/OR/XOR: sets Z/H, clears N and C.
+    pub fn apply_logic(&mut self, result: u8, half_carry: bool) {
+        self.zero = result == 0;
+        self.subtract = false;
+        self.half_carry = half_carry;
+        self.carry = false;
+    }
+
+    /// Flags for RLCA/RRCA/RLA/RRA: clears Z/N/H, sets C. Caller writes the
+    /// rotated result into the accumulator separately.
+    pub fn apply_rotate_accumulator(&mut self, carry: bool) {
+        self.zero = false;
+        self.subtract = false;
+        self.half_carry = false;
+        self.carry = carry;
+    }
+
+    /// Flags for the prefixed (CB) rotate/shift instructions: sets Z/C, clears N/H.
+    pub fn apply_rotate_shift(&mut self, result: u8, carry: bool) {
+        self.zero = result == 0;
+        self.subtract = false;
+        self.half_carry = false;
+        self.carry = carry;
+    }
+
+    /// Flags for ADD SP,r8 and LD HL,SP+r8: clears Z/N, sets H/C.
+    pub fn apply_sp_offset(&mut self, half_carry: bool, carry: bool) {
+        self.zero = false;
+        self.subtract = false;
+        self.half_carry = half_carry;
+        self.carry = carry;
+    }
+
+    /// Flags for CPL/SCF/CCF: sets only N and H, leaving Z and C untouched.
+    pub fn apply_nh(&mut self, subtract: bool, half_carry: bool) {
+        self.subtract = subtract;
+        self.half_carry = half_carry;
+    }
 }
 
 pub struct Registers {
@@ -198,5 +245,80 @@ impl Registers {
             Register16::HL => self.set_hl(value),
             Register16::SP => self.sp = value,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all_set() -> FlagsRegister {
+        FlagsRegister {
+            zero: true,
+            subtract: true,
+            half_carry: true,
+            carry: true,
+        }
+    }
+
+    #[test]
+    fn apply_arithmetic_sets_all_four_flags() {
+        let mut f = FlagsRegister::default();
+        f.apply_arithmetic(0, true, true, true);
+        assert_eq!(f.to_byte(), 0xF0);
+
+        let mut f = FlagsRegister::default();
+        f.apply_arithmetic(1, false, false, false);
+        assert_eq!(f.to_byte(), 0x00);
+    }
+
+    #[test]
+    fn apply_logic_clears_n_and_c() {
+        let mut f = all_set();
+        f.apply_logic(0, true);
+        assert!(f.zero);
+        assert!(!f.subtract);
+        assert!(f.half_carry);
+        assert!(!f.carry);
+    }
+
+    #[test]
+    fn apply_rotate_accumulator_clears_z_n_h() {
+        let mut f = all_set();
+        f.apply_rotate_accumulator(true);
+        assert!(!f.zero);
+        assert!(!f.subtract);
+        assert!(!f.half_carry);
+        assert!(f.carry);
+    }
+
+    #[test]
+    fn apply_rotate_shift_sets_z_and_c_only() {
+        let mut f = all_set();
+        f.apply_rotate_shift(0, false);
+        assert!(f.zero);
+        assert!(!f.subtract);
+        assert!(!f.half_carry);
+        assert!(!f.carry);
+    }
+
+    #[test]
+    fn apply_sp_offset_clears_z_and_n() {
+        let mut f = all_set();
+        f.apply_sp_offset(false, true);
+        assert!(!f.zero);
+        assert!(!f.subtract);
+        assert!(!f.half_carry);
+        assert!(f.carry);
+    }
+
+    #[test]
+    fn apply_nh_leaves_zero_and_carry_untouched() {
+        let mut f = all_set();
+        f.apply_nh(false, false);
+        assert!(f.zero);
+        assert!(!f.subtract);
+        assert!(!f.half_carry);
+        assert!(f.carry);
     }
 }

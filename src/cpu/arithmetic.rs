@@ -40,7 +40,7 @@ impl ArithmeticOps for CPU {
     fn add(&mut self, value: u8) -> u8 {
         let (new_value, did_overflow) = self.registers.a.overflowing_add(value);
         let half_carry = fh::half_carry_add(self.registers.a, value);
-        self.set_arithmetic_flags(new_value, false, did_overflow, half_carry);
+        self.registers.f.apply_arithmetic(new_value, false, did_overflow, half_carry);
         new_value
     }
 
@@ -55,7 +55,7 @@ impl ArithmeticOps for CPU {
         let half_carry = fh::half_carry_add_with_carry(self.registers.a, value, carry_in);
         let did_overflow = overflow1 || overflow2;
 
-        self.set_arithmetic_flags(new_value, false, did_overflow, half_carry);
+        self.registers.f.apply_arithmetic(new_value, false, did_overflow, half_carry);
         new_value
     }
 
@@ -63,7 +63,7 @@ impl ArithmeticOps for CPU {
     fn sub(&mut self, value: u8) -> u8 {
         let (new_value, did_overflow) = self.registers.a.overflowing_sub(value);
         let half_carry = fh::half_borrow_sub(self.registers.a, value);
-        self.set_arithmetic_flags(new_value, true, did_overflow, half_carry);
+        self.registers.f.apply_arithmetic(new_value, true, did_overflow, half_carry);
         new_value
     }
 
@@ -78,28 +78,28 @@ impl ArithmeticOps for CPU {
         let half_carry = fh::half_borrow_sub_with_carry(self.registers.a, value, carry_in);
         let did_overflow = overflow1 || overflow2;
 
-        self.set_arithmetic_flags(new_value, true, did_overflow, half_carry);
+        self.registers.f.apply_arithmetic(new_value, true, did_overflow, half_carry);
         new_value
     }
 
     /// Perform 8-bit bitwise AND: A &= value (sets Z and H flags, clears N and C).
     fn and(&mut self, value: u8) -> u8 {
         let new_value = self.registers.a & value;
-        self.set_logic_flags(new_value, true);
+        self.registers.f.apply_logic(new_value, true);
         new_value
     }
 
     /// Perform 8-bit bitwise OR: A |= value (sets Z flag, clears N, H, and C).
     fn or(&mut self, value: u8) -> u8 {
         let new_value = self.registers.a | value;
-        self.set_logic_flags(new_value, false);
+        self.registers.f.apply_logic(new_value, false);
         new_value
     }
 
     /// Perform 8-bit bitwise XOR: A ^= value (sets Z flag, clears N, H, and C).
     fn xor(&mut self, value: u8) -> u8 {
         let new_value = self.registers.a ^ value;
-        self.set_logic_flags(new_value, false);
+        self.registers.f.apply_logic(new_value, false);
         new_value
     }
 
