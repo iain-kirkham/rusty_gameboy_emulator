@@ -254,7 +254,10 @@ mod tests {
     }
 
     #[test]
-    fn addsp_and_ldhlsp_flags_match_expected() {
+    fn addsp_and_ldhlsp_pc_cycles_and_result() {
+        // Flag correctness for the SP+offset shape is covered directly by
+        // register.rs's apply_sp_offset tests; this checks that execute()
+        // wires compute_sp_plus_offset's result into PC/cycles/SP/HL correctly.
         let mut cpu = cpu_with_program(&[0x00, 0x00, 0x00]);
 
         cpu.registers.pc = 0x0100;
@@ -264,10 +267,6 @@ mod tests {
         assert_eq!(next_pc_addsp, 0x0102);
         assert_eq!(cycles_addsp, 16);
         assert_eq!(cpu.registers.sp, 0x0010);
-        assert!(!cpu.registers.f.zero);
-        assert!(!cpu.registers.f.subtract);
-        assert!(cpu.registers.f.half_carry);
-        assert!(!cpu.registers.f.carry);
 
         cpu.registers.pc = 0x0100;
         cpu.registers.sp = 0x0000;
@@ -276,10 +275,6 @@ mod tests {
         assert_eq!(next_pc_ldhlsp, 0x0102);
         assert_eq!(cycles_ldhlsp, 12);
         assert_eq!(cpu.registers.get_hl(), 0xFFFF);
-        assert!(!cpu.registers.f.zero);
-        assert!(!cpu.registers.f.subtract);
-        assert!(!cpu.registers.f.half_carry);
-        assert!(!cpu.registers.f.carry);
     }
 
     #[test]
