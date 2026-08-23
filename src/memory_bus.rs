@@ -166,13 +166,14 @@ impl MemoryBus {
                 // Copy 160 bytes into OAM (0xFE00..0xFE9F)
                 for i in 0..160usize {
                     let src = base.wrapping_add(i);
-                    let dst = 0xFE00usize + i;
+                    let dst = 0xFE00u16 + i as u16;
 
                     // Read source byte using read_byte so ROM/Vram/timer/io handling is respected
                     // If src is out of range, treat as 0xFF (read_byte already handles unmapped)
                     let byte = self.read_byte(src as u16);
-                    // Write directly into OAM region memory to avoid re-entering this write_byte path
-                    self.memory[dst] = byte;
+                    // Route through write_byte so OAM writes stay consistent with any
+                    // future access-timing rules, instead of bypassing them here.
+                    self.write_byte(dst, byte);
                 }
             }
 
@@ -237,5 +238,26 @@ impl MemoryBus {
     /// Check if any interrupt is pending (for HALT wake-up).
     pub fn any_interrupt_pending(&self) -> bool {
         self.interrupts.any_interrupt_pending()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn oam_dma_copies_160_bytes_via_write_byte() {
+        let mut bus = MemoryBus::new(vec![0u8; MEM_SIZE]);
+
+        let source_base = 0xC000u16;
+        for i in 0..160u16 {
+            bus.write_byte(source_base + i, i as u8);
+        }
+
+        bus.write_byte(0xFF46, (source_base >> 8) as u8);
+
+        for i in 0..160u16 {
+            assert_eq!(bus.read_byte(0xFE00 + i), i as u8);
+        }
     }
 }
